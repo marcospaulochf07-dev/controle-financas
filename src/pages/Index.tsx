@@ -1,6 +1,6 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, ChevronLeft, ChevronRight, BarChart3, FileText, Bell, Users, GitCompare } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, BarChart3, FileText, Users, GitCompare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -73,11 +73,6 @@ const Index = () => {
   const revenue = getMonthlyRevenue(monthKey);
   const margin = revenue - totalCost;
 
-  const pendingExpenses = useMemo(
-    () => filtered.filter((e) => e.status === "pendente"),
-    [filtered]
-  );
-
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear(year - 1); }
     else setMonth(month - 1);
@@ -98,10 +93,17 @@ const Index = () => {
     refresh();
   };
 
+  const driverDailiesTotal = useMemo(() => {
+    void refreshKey;
+    return getDriverDailies()
+      .filter((d) => { const dt = new Date(d.date); return dt.getFullYear() === year && dt.getMonth() === month; })
+      .reduce((s, d) => s + d.routes * d.valuePerRoute, 0);
+  }, [refreshKey, year, month]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-border/50 gradient-header glass">
+      <header className="sticky top-0 z-30 border-b border-border/50 gradient-header glass" role="banner">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -125,36 +127,48 @@ const Index = () => {
             <Button
               onClick={() => setModalOpen(true)}
               size="sm"
-              className="gap-1.5 rounded-xl font-semibold shadow-md hover:shadow-lg transition-shadow"
+              className="gap-1.5 rounded-xl font-semibold shadow-md hover:shadow-lg transition-shadow focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label="Adicionar novo lançamento"
             >
               <Plus className="h-3.5 w-3.5" />
-              Novo Lançamento
+              <span className="hidden sm:inline">Novo Lançamento</span>
+              <span className="sm:hidden">Novo</span>
             </Button>
           </motion.div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6" role="main">
         {/* Filters */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
           className="flex flex-wrap items-center gap-3"
+          role="navigation"
+          aria-label="Filtros de período e veículo"
         >
           <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-card px-2 py-1 shadow-card">
-            <button onClick={prevMonth} className="rounded-lg p-1.5 hover:bg-accent transition-colors">
+            <button
+              onClick={prevMonth}
+              className="rounded-lg p-1.5 hover:bg-accent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              aria-label="Mês anterior"
+            >
               <ChevronLeft className="h-4 w-4 text-muted-foreground" />
             </button>
-            <span className="min-w-[150px] text-center text-sm font-bold tracking-tight">
+            <span className="min-w-[150px] text-center text-sm font-bold tracking-tight" aria-live="polite">
               {MONTHS[month]} {year}
             </span>
-            <button onClick={nextMonth} className="rounded-lg p-1.5 hover:bg-accent transition-colors">
+            <button
+              onClick={nextMonth}
+              className="rounded-lg p-1.5 hover:bg-accent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              aria-label="Próximo mês"
+            >
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
           <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
-            <SelectTrigger className="h-9 w-40 rounded-xl border-border/50 text-xs font-medium shadow-card">
+            <SelectTrigger className="h-9 w-40 rounded-xl border-border/50 text-xs font-medium shadow-card" aria-label="Filtrar por veículo">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -167,7 +181,7 @@ const Index = () => {
         </motion.div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" role="region" aria-label="Métricas financeiras">
           <div>
             <MetricCard label="Receita Bruta (Usina)" value={revenue} delay={0.1} />
             <motion.div
@@ -188,23 +202,6 @@ const Index = () => {
           />
         </div>
 
-        {/* Pending Reminders Banner */}
-        <AnimatePresence>
-          {pendingExpenses.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.4 }}
-              className="overflow-hidden"
-            >
-              <div className="rounded-2xl border-2 border-warning/30 bg-gradient-to-r from-warning/10 via-warning/5 to-transparent p-4">
-                <PaymentReminders expenses={filtered} onMarkPaid={handleMarkPaid} />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <motion.div
@@ -212,10 +209,9 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.3 }}
           >
-            <TabsList className="w-full justify-start flex-wrap h-auto gap-1.5 bg-transparent p-0 mb-4">
+            <TabsList className="w-full justify-start flex-wrap h-auto gap-1.5 bg-transparent p-0 mb-4" aria-label="Seções do painel">
               {[
                 { value: "lancamentos", label: "Lançamentos", icon: FileText },
-                { value: "lembretes", label: "Lembretes", icon: Bell },
                 { value: "diarias", label: "Diárias", icon: Users },
                 { value: "graficos", label: "Gráficos", icon: BarChart3 },
                 { value: "comparativo", label: "Comparativo", icon: GitCompare },
@@ -223,7 +219,7 @@ const Index = () => {
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className="gap-1.5 rounded-xl border border-transparent px-4 py-2 text-sm font-semibold transition-all data-[state=active]:border-primary/20 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm hover:bg-accent/60"
+                  className="gap-1.5 rounded-xl border border-transparent px-4 py-2 text-sm font-semibold transition-all data-[state=active]:border-primary/20 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                 >
                   <TabIcon className="h-3.5 w-3.5" />
                   {label}
@@ -237,9 +233,9 @@ const Index = () => {
               <motion.div variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                   <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card lg:col-span-2">
-                    <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                    <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                       Lançamentos — {MONTHS[month]} {year}
-                    </h3>
+                    </h2>
                     <ExpenseTable expenses={filtered} onDelete={handleDelete} />
                   </div>
                   <div className="space-y-6">
@@ -247,18 +243,11 @@ const Index = () => {
                     <VehicleManager onUpdated={refresh} />
                   </div>
                 </div>
-              </motion.div>
-            </TabsContent>
 
-            <TabsContent value="lembretes" key="lembretes" asChild>
-              <motion.div variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {/* Lembretes abaixo dos lançamentos */}
+                <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2" role="region" aria-label="Lembretes de pagamento" aria-live="polite">
                   <PaymentReminders expenses={filtered} onMarkPaid={handleMarkPaid} />
-                  <RecurringReminders onUpdated={refresh} driverDailiesTotal={
-                    getDriverDailies()
-                      .filter((d) => { const dt = new Date(d.date); return dt.getFullYear() === year && dt.getMonth() === month; })
-                      .reduce((s, d) => s + d.routes * d.valuePerRoute, 0)
-                  } />
+                  <RecurringReminders onUpdated={refresh} driverDailiesTotal={driverDailiesTotal} />
                 </div>
               </motion.div>
             </TabsContent>

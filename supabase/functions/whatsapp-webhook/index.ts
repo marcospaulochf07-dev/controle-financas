@@ -45,6 +45,8 @@ serve(async (req) => {
       );
     }
 
+    const today = new Date().toISOString().split("T")[0];
+
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -63,20 +65,26 @@ Identifique a AÇÃO da mensagem:
 1. **register_expense** — Quando o usuário quer REGISTRAR um novo gasto. Ex: "Troca de pneus Van 01 R$450", "Seguro R$400 pendente"
 2. **mark_paid_by_description** — Quando o usuário diz que um item específico foi pago, usando a descrição. Ex: "Troca de pneus pago", "Parcela financiamento paga"
 3. **mark_paid_by_category** — Quando o usuário diz que uma categoria inteira foi paga. Ex: "Contador paga", "Seguro pago", "Financiamento pago"
+4. **register_daily** — Quando o usuário quer registrar diárias de motoristas. Ex: "1 diária para Valdir", "Coloque 2 diárias para João", "3 rotas para Maria", "Coloque 1 diária para Valdir"
 
 Para register_expense, extraia:
-- date: data (YYYY-MM-DD, use ${new Date().toISOString().split("T")[0]} se não especificada)
+- date: data (YYYY-MM-DD, use ${today} se não especificada)
 - category: (manutencao, seguro, imposto, financiamento, salario, fgts, contador, rastreador, diaria, outros)
 - description: descrição curta
 - vehicle: veículo (ex: "Van 01", "Geral" se não especificado)
-- amount: valor em reais
+- amount: valor em reais (OBRIGATÓRIO, número > 0)
 - status: "pago" ou "pendente" (default: "pago")
 
 Para mark_paid_by_description, extraia:
 - search_description: a descrição do item a ser marcado como pago
 
 Para mark_paid_by_category, extraia:
-- search_category: a categoria a ser marcada como paga (use os nomes normalizados: manutencao, seguro, imposto, financiamento, salario, fgts, contador, rastreador, diaria)
+- search_category: a categoria a ser marcada como paga
+
+Para register_daily, extraia:
+- driver_name: nome do motorista (OBRIGATÓRIO)
+- routes: número de rotas/diárias (default: 1, mínimo 1, máximo 10)
+- vehicle: veículo se mencionado (default: "Geral")
 
 Se não parecer nenhuma dessas ações, use action "invalid".`,
           },
@@ -93,7 +101,7 @@ Se não parecer nenhuma dessas ações, use action "invalid".`,
                 properties: {
                   action: {
                     type: "string",
-                    enum: ["register_expense", "mark_paid_by_description", "mark_paid_by_category", "invalid"],
+                    enum: ["register_expense", "mark_paid_by_description", "mark_paid_by_category", "register_daily", "invalid"],
                   },
                   date: { type: "string", description: "Data YYYY-MM-DD (para register_expense)" },
                   category: {
@@ -110,6 +118,8 @@ Se não parecer nenhuma dessas ações, use action "invalid".`,
                     enum: ["manutencao", "seguro", "imposto", "financiamento", "salario", "fgts", "contador", "rastreador", "diaria", "outros"],
                     description: "Categoria a marcar como paga",
                   },
+                  driver_name: { type: "string", description: "Nome do motorista (para register_daily)" },
+                  routes: { type: "number", description: "Número de rotas/diárias (default 1)" },
                 },
                 required: ["action"],
                 additionalProperties: false,
@@ -147,7 +157,7 @@ Se não parecer nenhuma dessas ações, use action "invalid".`,
 
     // === INVALID ===
     if (parsed.action === "invalid") {
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>❓ Não entendi. Envie algo como:\n• "Troca de pneus Van 01 R$450"\n• "Contador paga"\n• "Troca de pneus pago"</Message></Response>`;
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>❓ Não entendi. Envie algo como:\n• "Troca de pneus Van 01 R$450"\n• "Contador paga"\n• "1 diária para Valdir"</Message></Response>`;
       return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
     }
 
@@ -170,7 +180,7 @@ Se não parecer nenhuma dessas ações, use action "invalid".`,
       const item = items[0];
       await supabase.from("expenses").update({ status: "pago" }).eq("id", item.id);
 
-      const amt = Number(item.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+      const amt = Number(item.amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
       const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Marcado como PAGO!\n📋 ${item.description}\n💰 R$ ${amt}\n📂 ${item.category}</Message></Response>`;
       return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
     }
@@ -194,18 +204,88 @@ Se não parecer nenhuma dessas ações, use action "invalid".`,
       const item = items[0];
       await supabase.from("expenses").update({ status: "pago" }).eq("id", item.id);
 
-      const amt = Number(item.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+      const amt = Number(item.amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
       const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Marcado como PAGO!\n📋 ${item.description}\n💰 R$ ${amt}\n📂 ${item.category}</Message></Response>`;
       return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
     }
 
+    // === REGISTER DAILY ===
+    if (parsed.action === "register_daily") {
+      const driverName = parsed.driver_name || "";
+      const numRoutes = Math.max(1, Math.min(10, parsed.routes || 1));
+      const valuePerRoute = 45;
+      const totalAmount = numRoutes * valuePerRoute;
+      const vehicleName = parsed.vehicle || "Geral";
+
+      if (!driverName.trim()) {
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>❌ Nome do motorista não identificado. Envie: "1 diária para [nome]"</Message></Response>`;
+        return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+      }
+
+      // Check if there's already a pending diaria expense for this driver this month
+      const now = new Date();
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      const nextMonth = now.getMonth() === 11
+        ? `${now.getFullYear() + 1}-01-01`
+        : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, "0")}-01`;
+
+      const { data: existing } = await supabase
+        .from("expenses")
+        .select("*")
+        .eq("category", "diaria")
+        .eq("status", "pendente")
+        .ilike("description", `%${driverName.trim()}%`)
+        .gte("date", monthStart)
+        .lt("date", nextMonth)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        // Update existing: add routes value
+        const item = existing[0];
+        const newAmount = Number(item.amount) + totalAmount;
+        await supabase.from("expenses").update({ amount: newAmount }).eq("id", item.id);
+
+        const amtStr = newAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Diária atualizada!\n👤 ${driverName}\n🛣️ +${numRoutes} rota${numRoutes > 1 ? "s" : ""} (R$ ${totalAmount.toFixed(2)})\n💰 Total acumulado: R$ ${amtStr}\n📂 Pendente</Message></Response>`;
+        return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+      } else {
+        // Create new pending expense
+        const monthLabel = `${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`;
+        const { error } = await supabase.from("expenses").insert({
+          date: today,
+          category: "diaria",
+          description: `Diárias ${driverName.trim()} - ${monthLabel}`,
+          vehicle: vehicleName,
+          amount: totalAmount,
+          status: "pendente",
+          source: "whatsapp",
+        });
+
+        if (error) {
+          console.error("DB insert error:", error);
+          throw new Error(`Database error: ${error.message}`);
+        }
+
+        const amtStr = totalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Diária registrada!\n👤 ${driverName}\n🛣️ ${numRoutes} rota${numRoutes > 1 ? "s" : ""}\n💰 R$ ${amtStr}\n📂 Pendente</Message></Response>`;
+        return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+      }
+    }
+
     // === REGISTER EXPENSE ===
+    const amount = Number(parsed.amount) || 0;
+    if (amount <= 0) {
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>❌ Valor não identificado. Envie com o valor, ex: "Troca de pneus R$450"</Message></Response>`;
+      return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+    }
+
     const { data, error } = await supabase.from("expenses").insert({
-      date: parsed.date,
-      category: parsed.category,
-      description: parsed.description,
+      date: parsed.date || today,
+      category: parsed.category || "outros",
+      description: parsed.description || "",
       vehicle: parsed.vehicle || "Geral",
-      amount: parsed.amount,
+      amount,
       status: parsed.status || "pago",
       source: "whatsapp",
     }).select().single();
@@ -215,8 +295,8 @@ Se não parecer nenhuma dessas ações, use action "invalid".`,
       throw new Error(`Database error: ${error.message}`);
     }
 
-    const formattedAmount = parsed.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Registrado!\n📋 ${parsed.description}\n🚐 ${parsed.vehicle || "Geral"}\n💰 R$ ${formattedAmount}\n📅 ${parsed.date}\n📂 ${parsed.category}\n🔖 ${parsed.status || "pago"}</Message></Response>`;
+    const formattedAmount = amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Registrado!\n📋 ${parsed.description || "Sem descrição"}\n🚐 ${parsed.vehicle || "Geral"}\n💰 R$ ${formattedAmount}\n📅 ${parsed.date || today}\n📂 ${parsed.category || "outros"}\n🔖 ${parsed.status || "pago"}</Message></Response>`;
     return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
 
   } catch (e) {

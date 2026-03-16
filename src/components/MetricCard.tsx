@@ -39,8 +39,10 @@ export function MetricCard({ label, value, type = "neutral", delay = 0 }: Metric
       transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
       whileHover={{ y: -2, transition: { duration: 0.2 } }}
       className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradientClass} border border-border/50 p-5 shadow-card transition-shadow duration-300 hover:shadow-card-hover`}
+      role="region"
+      aria-label={`${label}: ${value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`}
     >
-      <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-gradient-to-br from-primary/5 to-transparent" />
+      <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-gradient-to-br from-primary/5 to-transparent" aria-hidden="true" />
       
       <div className="relative flex items-start justify-between">
         <div className="space-y-2">
@@ -54,7 +56,7 @@ export function MetricCard({ label, value, type = "neutral", delay = 0 }: Metric
             })}
           </p>
         </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconBgClass}`}>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconBgClass}`} aria-hidden="true">
           <Icon className="h-5 w-5" />
         </div>
       </div>
