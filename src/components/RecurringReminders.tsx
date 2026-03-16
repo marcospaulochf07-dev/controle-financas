@@ -116,7 +116,16 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
     });
   }, [refreshKey, driverDailiesTotal]);
 
-  // Auto-sync disabled to avoid duplication — recurring costs are managed only in this component
+  // Auto-sync: create pending expenses for recurring costs at start of each month
+  useEffect(() => {
+    if (allExpenses.length === 0 && reminders.length === 0) return;
+    syncRecurringToExpenses(reminders, allExpenses).then((created) => {
+      if (created) {
+        onUpdated();
+        toast.success("Custos fixos lançados como pagamentos pendentes do mês.");
+      }
+    });
+  }, [reminders, allExpenses]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = () => {
     setRefreshKey((k) => k + 1);
