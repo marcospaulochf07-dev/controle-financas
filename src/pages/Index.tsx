@@ -231,8 +231,8 @@ const Index = () => {
           <AnimatePresence mode="wait">
             <TabsContent value="lancamentos" key="lancamentos" asChild>
               <motion.div variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                  <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card lg:col-span-2">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+                  <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card lg:col-span-3">
                     <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                       Lançamentos — {MONTHS[month]} {year}
                     </h2>
@@ -245,9 +245,13 @@ const Index = () => {
                 </div>
 
                 {/* Lembretes abaixo dos lançamentos */}
-                <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2" role="region" aria-label="Lembretes de pagamento" aria-live="polite">
-                  <PaymentReminders expenses={filtered} onMarkPaid={handleMarkPaid} />
-                  <RecurringReminders onUpdated={refresh} driverDailiesTotal={driverDailiesTotal} />
+                <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5" role="region" aria-label="Lembretes de pagamento" aria-live="polite">
+                  <div className="lg:col-span-3">
+                    <PaymentReminders expenses={filtered} onMarkPaid={handleMarkPaid} />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <RecurringReminders onUpdated={refresh} driverDailiesTotal={driverDailiesTotal} />
+                  </div>
                 </div>
               </motion.div>
             </TabsContent>
