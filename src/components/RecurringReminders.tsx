@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from "react";
-import { Bell, Plus, Trash2, CheckCircle2 } from "lucide-react";
+import { Bell, Plus, Trash2, CheckCircle2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RecurringReminder, ExpenseCategory, SORTED_CATEGORIES, CATEGORY_LABELS } from "@/lib/types";
-import { getRecurringReminders, saveRecurringReminder, deleteRecurringReminder, toggleRecurringReminderPaid } from "@/lib/store";
+import { getRecurringReminders, saveRecurringReminder, deleteRecurringReminder, toggleRecurringReminderPaid, saveExpense } from "@/lib/store";
 import { toast } from "sonner";
+import { useExpenses } from "@/hooks/use-expenses";
 
 const DEFAULT_RECURRING: Omit<RecurringReminder, "id">[] = [
   { label: "Contador", dayOfMonth: 10, amount: 810, category: "contador" },
@@ -20,14 +21,70 @@ interface Props {
   driverDailiesTotal?: number;
 }
 
+function getMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function seedDefaults() {
   const existing = getRecurringReminders();
   if (existing.length === 0) {
     for (const item of DEFAULT_RECURRING) {
       saveRecurringReminder(item);
     }
-    // Add driver dailies placeholder
     saveRecurringReminder({ label: "Diárias dos Motoristas", dayOfMonth: 30, amount: 0, category: "diaria" });
+  }
+}
+
+// Check and reset paid status at beginning of each month
+function checkMonthlyReset() {
+  const LAST_RESET_KEY = "recurring-last-reset-month";
+  const currentMonth = getMonthKey();
+  const lastReset = localStorage.getItem(LAST_RESET_KEY);
+
+  if (lastReset !== currentMonth) {
+    // New month — reset all paid statuses to unpaid
+    const reminders = getRecurringReminders();
+    for (const r of reminders) {
+      if (r.paid) {
+        toggleRecurringReminderPaid(r.id); // toggle back to unpaid
+      }
+    }
+    localStorage.setItem(LAST_RESET_KEY, currentMonth);
+  }
+}
+
+// Sync recurring reminders as pending expenses in the DB for current month
+async function syncRecurringToExpenses(reminders: RecurringReminder[], expenses: { category: string; source?: string; description: string; date: string }[]) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
+
+  for (const r of reminders) {
+    if (r.amount <= 0) continue;
+    if (r.category === "diaria") continue; // dailies are handled separately
+
+    // Check if expense already exists for this recurring item this month
+    const alreadyExists = expenses.some((e) => {
+      const d = new Date(e.date);
+      return e.source === "recorrente-auto" &&
+        e.description === r.label &&
+        d.getFullYear() === year && d.getMonth() === month;
+    });
+
+    if (!alreadyExists) {
+      const day = Math.min(r.dayOfMonth, 28);
+      await saveExpense({
+        date: `${monthStr}-${String(day).padStart(2, "0")}`,
+        category: r.category,
+        description: r.label,
+        vehicle: "Geral",
+        amount: r.amount,
+        status: "pendente",
+        source: "recorrente-auto",
+      });
+    }
   }
 }
 
@@ -38,22 +95,30 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
   const [day, setDay] = useState("5");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<ExpenseCategory>("imposto");
+  const { expenses: allExpenses } = useExpenses();
 
   useEffect(() => {
     seedDefaults();
+    checkMonthlyReset();
     setRefreshKey((k) => k + 1);
   }, []);
 
   const reminders = useMemo(() => {
     void refreshKey;
     return getRecurringReminders().map((r) => {
-      // Auto-update driver dailies amount from calculated total
       if (r.category === "diaria" && r.label.toLowerCase().includes("diária")) {
         return { ...r, amount: driverDailiesTotal };
       }
       return r;
     });
   }, [refreshKey, driverDailiesTotal]);
+
+  // Sync recurring items to expenses table once when component mounts
+  useEffect(() => {
+    if (reminders.length > 0 && allExpenses.length >= 0) {
+      syncRecurringToExpenses(reminders, allExpenses).then(() => onUpdated());
+    }
+  }, []); // only on mount
 
   const refresh = () => {
     setRefreshKey((k) => k + 1);
@@ -98,14 +163,14 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
   const paidReminders = reminders.filter((r) => r.paid);
 
   return (
-    <div className="shadow-card rounded-xl bg-card p-5">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="shadow-card rounded-2xl border border-border/50 bg-card p-6">
+      <div className="mb-4 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
             Custos Fixos Mensais
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Total: {totalMonthly.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+          <p className="text-xs text-muted-foreground mt-1">
+            Total mensal: <span className="font-bold text-foreground">{totalMonthly.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
           </p>
         </div>
         <Button
@@ -120,7 +185,7 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
       </div>
 
       {adding && (
-        <div className="mb-4 space-y-2 rounded-lg border bg-muted/30 p-3">
+        <div className="mb-4 space-y-2 rounded-xl border border-border/50 bg-muted/30 p-3">
           <Input
             placeholder="Ex: Imposto da nota fiscal"
             value={label}
@@ -173,19 +238,19 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
                 return (
                   <div
                     key={r.id}
-                    className={`flex items-center justify-between rounded-lg px-3 py-2 border ${
+                    className={`flex items-center justify-between rounded-xl px-4 py-3 border ${
                       isNear
                         ? "border-warning/30 bg-warning/5"
                         : "border-border/50 bg-muted/20"
                     }`}
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Bell className={`h-3.5 w-3.5 ${isNear ? "text-warning" : "text-muted-foreground"}`} />
+                      <Bell className={`h-3.5 w-3.5 shrink-0 ${isNear ? "text-warning" : "text-muted-foreground"}`} />
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{r.label}</p>
                         <p className="text-xs text-muted-foreground">
                           {CATEGORY_LABELS[r.category]} · Dia {r.dayOfMonth} ·{" "}
-                          {r.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                          <span className="font-semibold">{r.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
                         </p>
                       </div>
                     </div>
@@ -214,15 +279,15 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
 
           {paidReminders.length > 0 && (
             <div className={pendingReminders.length > 0 ? "mt-4 pt-4 border-t" : ""}>
-              <h4 className="text-xs font-medium text-muted-foreground mb-2">Pagos</h4>
+              <h4 className="text-xs font-medium text-muted-foreground mb-2">Pagos este mês</h4>
               <div className="space-y-1.5">
                 {paidReminders.map((r) => (
                   <div
                     key={r.id}
-                    className="flex items-center justify-between rounded-lg px-3 py-1.5 bg-profit/5 border border-profit/20"
+                    className="flex items-center justify-between rounded-xl px-4 py-2.5 bg-profit/5 border border-profit/20"
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-profit" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-profit shrink-0" />
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-muted-foreground truncate">{r.label}</p>
                         <p className="text-xs text-muted-foreground/70">
@@ -238,7 +303,7 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
                         onClick={() => handleTogglePaid(r.id)}
                         title="Voltar para pendente"
                       >
-                        <Bell className="h-3.5 w-3.5" />
+                        <RotateCcw className="h-3.5 w-3.5" />
                       </Button>
                       <button
                         onClick={() => handleDelete(r.id)}
