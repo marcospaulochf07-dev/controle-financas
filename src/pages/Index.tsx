@@ -97,7 +97,7 @@ const Index = () => {
           <div className="flex items-center gap-3">
             <img src={logo} alt="FV Freitas Vidal" className="h-10 w-auto" />
             <div>
-              <h1 className="text-lg font-semibold">Gestor de Rota</h1>
+              <h1 className="text-lg font-semibold">Gestor de Frota</h1>
               <p className="text-xs text-muted-foreground">Freitas Vidal Serviços LTDA</p>
             </div>
           </div>
