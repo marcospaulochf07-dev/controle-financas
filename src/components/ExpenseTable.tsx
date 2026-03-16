@@ -45,7 +45,7 @@ export function ExpenseTable({ expenses, onDelete }: ExpenseTableProps) {
               <td className="py-3 pr-4 text-muted-foreground">
                 {expense.description}
               </td>
-              <td className="py-3 pr-4">{expense.vehicle}</td>
+              <td className="py-3 pr-4">{getVehicleName(expense.vehicle)}</td>
               <td className="py-3 pr-4 text-right tabular-nums font-medium">
                 {expense.amount.toLocaleString("pt-BR", {
                   minimumFractionDigits: 2,

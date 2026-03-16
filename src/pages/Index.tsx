@@ -7,7 +7,11 @@ import { ExpenseTable } from "@/components/ExpenseTable";
 import { NewExpenseModal } from "@/components/NewExpenseModal";
 import { RevenueEditor } from "@/components/RevenueEditor";
 import { CostBreakdown } from "@/components/CostBreakdown";
-import { getExpenses, deleteExpense, getMonthlyRevenue } from "@/lib/store";
+import { RevenueChart } from "@/components/RevenueChart";
+import { PaymentReminders } from "@/components/PaymentReminders";
+import { MonthComparison } from "@/components/MonthComparison";
+import { VehicleManager } from "@/components/VehicleManager";
+import { getExpenses, deleteExpense, getMonthlyRevenue, getVehicleName } from "@/lib/store";
 import { VEHICLES } from "@/lib/types";
 
 const MONTHS = [
@@ -79,9 +83,9 @@ const Index = () => {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6">
         {/* Filters */}
-        <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1">
             <button onClick={prevMonth} className="rounded p-1 hover:bg-accent">
               <ChevronLeft className="h-4 w-4 text-muted-foreground" />
@@ -94,20 +98,20 @@ const Index = () => {
             </button>
           </div>
           <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
-            <SelectTrigger className="h-8 w-32 text-xs">
+            <SelectTrigger className="h-8 w-36 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Todos">Todos</SelectItem>
               {VEHICLES.map((v) => (
-                <SelectItem key={v} value={v}>{v}</SelectItem>
+                <SelectItem key={v} value={v}>{getVehicleName(v)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
 
         {/* Metrics */}
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <MetricCard label="Receita Bruta (Usina)" value={revenue} />
             <div className="mt-2 px-1">
@@ -122,6 +126,15 @@ const Index = () => {
           />
         </div>
 
+        {/* Payment Reminders */}
+        <PaymentReminders expenses={filtered} />
+
+        {/* Revenue Chart */}
+        <RevenueChart year={year} />
+
+        {/* Month Comparison */}
+        <MonthComparison year={year} month={month} />
+
         {/* Main content grid */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Table */}
@@ -132,8 +145,11 @@ const Index = () => {
             <ExpenseTable expenses={filtered} onDelete={handleDelete} />
           </div>
 
-          {/* Breakdown */}
-          <CostBreakdown expenses={filtered} />
+          {/* Sidebar */}
+          <div className="space-y-6">
+            <CostBreakdown expenses={filtered} />
+            <VehicleManager onUpdated={refresh} />
+          </div>
         </div>
       </main>
 

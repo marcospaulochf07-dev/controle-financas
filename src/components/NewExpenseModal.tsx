@@ -80,7 +80,7 @@ export function NewExpenseModal({ open, onClose, onSaved }: Props) {
                 <Select value={category} onValueChange={(v) => setCategory(v as ExpenseCategory)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                    {SORTED_CATEGORIES.map(([key, label]) => (
                       <SelectItem key={key} value={key}>{label}</SelectItem>
                     ))}
                   </SelectContent>
