@@ -1,12 +1,147 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState, useCallback, useMemo } from "react";
+import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MetricCard } from "@/components/MetricCard";
+import { ExpenseTable } from "@/components/ExpenseTable";
+import { NewExpenseModal } from "@/components/NewExpenseModal";
+import { RevenueEditor } from "@/components/RevenueEditor";
+import { CostBreakdown } from "@/components/CostBreakdown";
+import { getExpenses, deleteExpense, getMonthlyRevenue } from "@/lib/store";
+import { VEHICLES } from "@/lib/types";
+
+const MONTHS = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+function getMonthKey(year: number, month: number) {
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
 
 const Index = () => {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
+  const [vehicleFilter, setVehicleFilter] = useState("Todos");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  const monthKey = getMonthKey(year, month);
+
+  const allExpenses = useMemo(() => {
+    void refreshKey;
+    return getExpenses();
+  }, [refreshKey]);
+
+  const filtered = useMemo(() => {
+    return allExpenses.filter((e) => {
+      const d = new Date(e.date);
+      const matchMonth = d.getFullYear() === year && d.getMonth() === month;
+      const matchVehicle = vehicleFilter === "Todos" || e.vehicle === vehicleFilter;
+      return matchMonth && matchVehicle;
+    });
+  }, [allExpenses, year, month, vehicleFilter]);
+
+  const totalCost = filtered.reduce((s, e) => s + e.amount, 0);
+  const revenue = getMonthlyRevenue(monthKey);
+  const margin = revenue - totalCost;
+
+  const prevMonth = () => {
+    if (month === 0) { setMonth(11); setYear(year - 1); }
+    else setMonth(month - 1);
+  };
+  const nextMonth = () => {
+    if (month === 11) { setMonth(0); setYear(year + 1); }
+    else setMonth(month + 1);
+  };
+
+  const handleDelete = (id: string) => {
+    deleteExpense(id);
+    refresh();
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen">
+      {/* Header */}
+      <header className="sticky top-0 z-30 border-b bg-card/80 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+          <div>
+            <h1 className="text-lg font-semibold">Gestor de Rota</h1>
+            <p className="text-xs text-muted-foreground">Controle de custos operacionais</p>
+          </div>
+          <Button onClick={() => setModalOpen(true)} size="sm" className="gap-1.5">
+            <Plus className="h-3.5 w-3.5" />
+            Novo Lançamento
+          </Button>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+        {/* Filters */}
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1">
+            <button onClick={prevMonth} className="rounded p-1 hover:bg-accent">
+              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <span className="min-w-[140px] text-center text-sm font-medium">
+              {MONTHS[month]} {year}
+            </span>
+            <button onClick={nextMonth} className="rounded p-1 hover:bg-accent">
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+          <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
+            <SelectTrigger className="h-8 w-32 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Todos">Todos</SelectItem>
+              {VEHICLES.map((v) => (
+                <SelectItem key={v} value={v}>{v}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Metrics */}
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <MetricCard label="Receita Bruta (Usina)" value={revenue} />
+            <div className="mt-2 px-1">
+              <RevenueEditor month={monthKey} currentValue={revenue} onUpdated={refresh} />
+            </div>
+          </div>
+          <MetricCard label="Custo Operacional Total" value={totalCost} />
+          <MetricCard
+            label="Margem Líquida"
+            value={margin}
+            type={margin >= 0 ? "profit" : "loss"}
+          />
+        </div>
+
+        {/* Main content grid */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Table */}
+          <div className="shadow-card rounded-xl bg-card p-5 lg:col-span-2">
+            <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Lançamentos do Mês
+            </h3>
+            <ExpenseTable expenses={filtered} onDelete={handleDelete} />
+          </div>
+
+          {/* Breakdown */}
+          <CostBreakdown expenses={filtered} />
+        </div>
+      </main>
+
+      <NewExpenseModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSaved={refresh}
+      />
     </div>
   );
 };
