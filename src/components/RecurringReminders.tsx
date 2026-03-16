@@ -116,16 +116,7 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
     });
   }, [refreshKey, driverDailiesTotal]);
 
-  // Sync recurring items to expenses table once per month (not duplicating)
-  const [synced, setSynced] = useState(false);
-  useEffect(() => {
-    if (!synced && reminders.length > 0) {
-      setSynced(true);
-      syncRecurringToExpenses(reminders, allExpenses).then((created) => {
-        if (created) onUpdated();
-      });
-    }
-  }, [synced, reminders, allExpenses]);
+  // No longer auto-syncing to expenses table to avoid duplication
 
   const refresh = () => {
     setRefreshKey((k) => k + 1);

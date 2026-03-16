@@ -65,7 +65,9 @@ const Index = () => {
       const d = new Date(e.date);
       const matchMonth = d.getFullYear() === year && d.getMonth() === month;
       const matchVehicle = vehicleFilter === "Todos" || e.vehicle === vehicleFilter;
-      return matchMonth && matchVehicle;
+      // Exclude driver dailies and auto-recurring from lançamentos (shown in their own sections)
+      const isDriverDaily = e.source === "diaria-auto" || (e.category === "diaria" && e.source === "whatsapp");
+      return matchMonth && matchVehicle && !isDriverDaily;
     });
   }, [allExpenses, year, month, vehicleFilter]);
 
