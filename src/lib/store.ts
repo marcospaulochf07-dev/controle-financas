@@ -41,7 +41,7 @@ export async function saveExpense(expense: Omit<Expense, "id">): Promise<Expense
       vehicle: expense.vehicle,
       amount: expense.amount,
       status: expense.status as string,
-      source: "manual",
+      source: expense.source || "manual",
     })
     .select()
     .single();
@@ -59,6 +59,7 @@ export async function saveExpense(expense: Omit<Expense, "id">): Promise<Expense
     vehicle: data.vehicle,
     amount: Number(data.amount),
     status: data.status as Expense["status"],
+    source: data.source,
   };
 }
 

@@ -265,7 +265,7 @@ const Index = () => {
 
             <TabsContent value="diarias" key="diarias" asChild>
               <motion.div variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
-                <DriverDailies year={year} month={month} />
+                <DriverDailies year={year} month={month} expenses={allExpenses} onUpdated={refresh} />
               </motion.div>
             </TabsContent>
 

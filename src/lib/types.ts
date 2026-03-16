@@ -18,6 +18,7 @@ export interface Expense {
   vehicle: string;
   amount: number;
   status: "pago" | "pendente";
+  source?: string;
 }
 
 export interface RecurringReminder {

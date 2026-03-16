@@ -1,22 +1,24 @@
-import { useState, useMemo } from "react";
-import { Plus, Trash2, Route, Users, UserPlus } from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
+import { Plus, Trash2, Route, Users, UserPlus, CheckCircle2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getVehicles } from "@/lib/types";
-import { getDriverDailies, saveDriverDaily, deleteDriverDaily, getVehicleName, getDrivers, addDriver, removeDriver } from "@/lib/store";
+import { getVehicles, Expense } from "@/lib/types";
+import { getDriverDailies, saveDriverDaily, deleteDriverDaily, getVehicleName, getDrivers, addDriver, removeDriver, saveExpense, updateExpenseStatus, deleteExpense } from "@/lib/store";
 import { toast } from "sonner";
 
 interface Props {
   year: number;
   month: number;
+  expenses: Expense[];
+  onUpdated: () => void;
 }
 
 const VALUE_PER_ROUTE = 45;
 
-export function DriverDailies({ year, month }: Props) {
+export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [adding, setAdding] = useState(false);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -25,7 +27,10 @@ export function DriverDailies({ year, month }: Props) {
   const [vehicle, setVehicle] = useState("Van 01");
   const [newDriver, setNewDriver] = useState("");
 
-  const refresh = () => setRefreshKey((k) => k + 1);
+  const refresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    onUpdated();
+  }, [onUpdated]);
 
   const drivers = useMemo(() => {
     void refreshKey;
@@ -57,13 +62,56 @@ export function DriverDailies({ year, month }: Props) {
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
   }, [filtered]);
 
-  const handleAdd = () => {
+  // Find existing driver salary expenses for this month
+  const driverExpenses = useMemo(() => {
+    return expenses.filter((e) => {
+      const d = new Date(e.date);
+      return e.category === "diaria" && e.source === "diaria-auto" &&
+        d.getFullYear() === year && d.getMonth() === month;
+    });
+  }, [expenses, year, month]);
+
+  const getDriverExpense = (driverName: string) => {
+    return driverExpenses.find((e) => e.description.includes(driverName));
+  };
+
+  const syncDriverExpense = async (driverName: string, totalAmount: number) => {
+    const existing = getDriverExpense(driverName);
+    const monthLabel = `${String(month + 1).padStart(2, "0")}/${year}`;
+
+    if (existing) {
+      // Delete old and create new with updated amount (since we can't update amount via updateExpenseStatus)
+      if (existing.amount !== totalAmount) {
+        await deleteExpense(existing.id);
+        await saveExpense({
+          date: `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
+          category: "diaria",
+          description: `Diárias ${driverName} - ${monthLabel}`,
+          vehicle: "Geral",
+          amount: totalAmount,
+          status: "pendente",
+          source: "diaria-auto",
+        });
+      }
+    } else if (totalAmount > 0) {
+      await saveExpense({
+        date: `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
+        category: "diaria",
+        description: `Diárias ${driverName} - ${monthLabel}`,
+        vehicle: "Geral",
+        amount: totalAmount,
+        status: "pendente",
+        source: "diaria-auto",
+      });
+    }
+  };
+
+  const handleAdd = async () => {
     const numRoutes = parseInt(routes);
     if (!driverName.trim() || numRoutes < 1 || numRoutes > 10) {
       toast.error("Preencha o nome do motorista e número de rotas (1-10).");
       return;
     }
-    // Auto-add driver to list if not exists
     if (!drivers.includes(driverName.trim())) {
       addDriver(driverName.trim());
     }
@@ -74,6 +122,15 @@ export function DriverDailies({ year, month }: Props) {
       valuePerRoute: VALUE_PER_ROUTE,
       vehicle,
     });
+
+    // Calculate new total for this driver
+    const currentTotal = filtered
+      .filter((d) => d.driverName === driverName.trim())
+      .reduce((s, d) => s + d.routes * d.valuePerRoute, 0);
+    const newTotal = currentTotal + numRoutes * VALUE_PER_ROUTE;
+
+    await syncDriverExpense(driverName.trim(), newTotal);
+
     toast.success(`Diária registrada: ${numRoutes} rota${numRoutes > 1 ? "s" : ""} = R$ ${(numRoutes * VALUE_PER_ROUTE).toFixed(2)}`);
     setDriverName("");
     setRoutes("2");
@@ -81,10 +138,43 @@ export function DriverDailies({ year, month }: Props) {
     refresh();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    const daily = allDailies.find((d) => d.id === id);
     deleteDriverDaily(id);
+
+    if (daily) {
+      const remainingTotal = filtered
+        .filter((d) => d.driverName === daily.driverName && d.id !== id)
+        .reduce((s, d) => s + d.routes * d.valuePerRoute, 0);
+
+      if (remainingTotal === 0) {
+        const exp = getDriverExpense(daily.driverName);
+        if (exp) await deleteExpense(exp.id);
+      } else {
+        await syncDriverExpense(daily.driverName, remainingTotal);
+      }
+    }
+
     toast("Diária removida.");
     refresh();
+  };
+
+  const handleMarkPaid = async (driverName: string) => {
+    const exp = getDriverExpense(driverName);
+    if (exp) {
+      await updateExpenseStatus(exp.id, "pago");
+      toast.success(`Pagamento de ${driverName} marcado como pago!`);
+      refresh();
+    }
+  };
+
+  const handleMarkPending = async (driverName: string) => {
+    const exp = getDriverExpense(driverName);
+    if (exp) {
+      await updateExpenseStatus(exp.id, "pendente");
+      toast.success(`Pagamento de ${driverName} voltou para pendente.`);
+      refresh();
+    }
   };
 
   const handleAddDriver = () => {
@@ -100,6 +190,8 @@ export function DriverDailies({ year, month }: Props) {
     toast("Motorista removido.");
     refresh();
   };
+
+  const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   return (
     <div className="shadow-card rounded-xl bg-card p-5">
@@ -142,7 +234,7 @@ export function DriverDailies({ year, month }: Props) {
                           <p className="text-xs text-muted-foreground">
                             {driverData[1].routes} rotas · Salário:{" "}
                             <span className="font-semibold text-foreground">
-                              {driverData[1].value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                              {fmt(driverData[1].value)}
                             </span>
                           </p>
                         ) : (
@@ -251,21 +343,75 @@ export function DriverDailies({ year, month }: Props) {
             </div>
           )}
 
-          {/* Summary by driver with salary */}
+          {/* Summary by driver with salary and payment status */}
           {byDriver.length > 0 && (
             <div className="mb-4 space-y-1.5">
-              <h4 className="text-xs font-medium text-muted-foreground mb-2">Salário do Mês</h4>
-              {byDriver.map(([name, data]) => (
-                <div key={name} className="flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium">{name}</p>
-                    <p className="text-xs text-muted-foreground">{data.routes} rotas no mês</p>
+              <h4 className="text-xs font-medium text-muted-foreground mb-2">Salário do Mês — Pagamento</h4>
+              {byDriver.map(([name, data]) => {
+                const exp = getDriverExpense(name);
+                const isPaid = exp?.status === "pago";
+                return (
+                  <div
+                    key={name}
+                    className={`flex items-center justify-between rounded-lg px-3 py-2.5 border ${
+                      isPaid ? "bg-profit/5 border-profit/20" : "bg-warning/5 border-warning/30"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {isPaid ? (
+                        <CheckCircle2 className="h-4 w-4 text-profit shrink-0" />
+                      ) : (
+                        <Clock className="h-4 w-4 text-warning shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {data.routes} rotas · {isPaid ? "Pago" : "Pendente"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-2">
+                      <span className={`text-sm font-bold tabular-nums ${isPaid ? "text-profit" : "text-warning"}`}>
+                        {fmt(data.value)}
+                      </span>
+                      {isPaid ? (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-warning hover:bg-warning/10"
+                          onClick={() => handleMarkPending(name)}
+                          title="Voltar para pendente"
+                        >
+                          <Clock className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-profit hover:bg-profit/10"
+                          onClick={() => handleMarkPaid(name)}
+                          title="Marcar como pago"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-sm font-bold tabular-nums text-profit">
-                    {data.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
+
+              {/* Total pending */}
+              {(() => {
+                const pendingTotal = byDriver
+                  .filter(([name]) => getDriverExpense(name)?.status !== "pago")
+                  .reduce((s, [, d]) => s + d.value, 0);
+                return pendingTotal > 0 ? (
+                  <div className="flex items-center justify-between rounded-lg bg-warning/10 px-3 py-2 mt-2">
+                    <span className="text-xs font-semibold text-warning">Total Pendente</span>
+                    <span className="text-sm font-bold tabular-nums text-warning">{fmt(pendingTotal)}</span>
+                  </div>
+                ) : null;
+              })()}
             </div>
           )}
 
@@ -314,7 +460,7 @@ export function DriverDailies({ year, month }: Props) {
             <div className="mt-3 flex items-center justify-between border-t pt-3">
               <span className="text-xs text-muted-foreground">{totalRoutes} rotas no mês</span>
               <span className="text-sm font-bold tabular-nums">
-                {totalValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                {fmt(totalValue)}
               </span>
             </div>
           )}
