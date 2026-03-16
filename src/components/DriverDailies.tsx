@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { Plus, Trash2, Route, Users, UserPlus, CheckCircle2, Clock } from "lucide-react";
+import { Plus, Trash2, Route, Users, UserPlus, CheckCircle2, Clock, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,38 +66,40 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
   const driverExpenses = useMemo(() => {
     return expenses.filter((e) => {
       const d = new Date(e.date);
-      return e.category === "diaria" && e.source === "diaria-auto" &&
+      return e.category === "diaria" &&
+        (e.source === "diaria-auto" || e.source === "whatsapp") &&
         d.getFullYear() === year && d.getMonth() === month;
     });
   }, [expenses, year, month]);
 
-  const getDriverExpense = (driverName: string) => {
-    return driverExpenses.find((e) => e.description.includes(driverName));
+  const getDriverExpense = (name: string) => {
+    return driverExpenses.find((e) => e.description.includes(name));
   };
 
-  const syncDriverExpense = async (driverName: string, totalAmount: number) => {
-    const existing = getDriverExpense(driverName);
+  const syncDriverExpense = async (name: string, totalAmount: number) => {
+    const existing = getDriverExpense(name);
     const monthLabel = `${String(month + 1).padStart(2, "0")}/${year}`;
 
     if (existing) {
-      // Delete old and create new with updated amount (since we can't update amount via updateExpenseStatus)
       if (existing.amount !== totalAmount) {
         await deleteExpense(existing.id);
-        await saveExpense({
-          date: `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
-          category: "diaria",
-          description: `Diárias ${driverName} - ${monthLabel}`,
-          vehicle: "Geral",
-          amount: totalAmount,
-          status: "pendente",
-          source: "diaria-auto",
-        });
+        if (totalAmount > 0) {
+          await saveExpense({
+            date: `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
+            category: "diaria",
+            description: `Diárias ${name} - ${monthLabel}`,
+            vehicle: "Geral",
+            amount: totalAmount,
+            status: "pendente",
+            source: "diaria-auto",
+          });
+        }
       }
     } else if (totalAmount > 0) {
       await saveExpense({
         date: `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
         category: "diaria",
-        description: `Diárias ${driverName} - ${monthLabel}`,
+        description: `Diárias ${name} - ${monthLabel}`,
         vehicle: "Geral",
         amount: totalAmount,
         status: "pendente",
@@ -123,7 +125,6 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
       vehicle,
     });
 
-    // Calculate new total for this driver
     const currentTotal = filtered
       .filter((d) => d.driverName === driverName.trim())
       .reduce((s, d) => s + d.routes * d.valuePerRoute, 0);
@@ -131,7 +132,7 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
 
     await syncDriverExpense(driverName.trim(), newTotal);
 
-    toast.success(`Diária registrada: ${numRoutes} rota${numRoutes > 1 ? "s" : ""} = R$ ${(numRoutes * VALUE_PER_ROUTE).toFixed(2)}`);
+    toast.success(`+${numRoutes} rota${numRoutes > 1 ? "s" : ""} para ${driverName.trim()} = R$ ${(numRoutes * VALUE_PER_ROUTE).toFixed(2)}`);
     setDriverName("");
     setRoutes("2");
     setAdding(false);
@@ -159,20 +160,20 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
     refresh();
   };
 
-  const handleMarkPaid = async (driverName: string) => {
-    const exp = getDriverExpense(driverName);
+  const handleMarkPaid = async (name: string) => {
+    const exp = getDriverExpense(name);
     if (exp) {
       await updateExpenseStatus(exp.id, "pago");
-      toast.success(`Pagamento de ${driverName} marcado como pago!`);
+      toast.success(`Pagamento de ${name} marcado como pago!`);
       refresh();
     }
   };
 
-  const handleMarkPending = async (driverName: string) => {
-    const exp = getDriverExpense(driverName);
+  const handleMarkPending = async (name: string) => {
+    const exp = getDriverExpense(name);
     if (exp) {
       await updateExpenseStatus(exp.id, "pendente");
-      toast.success(`Pagamento de ${driverName} voltou para pendente.`);
+      toast.success(`Pagamento de ${name} voltou para pendente.`);
       refresh();
     }
   };
@@ -193,242 +194,172 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
 
   const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+  const pendingTotal = byDriver
+    .filter(([name]) => getDriverExpense(name)?.status !== "pago")
+    .reduce((s, [, d]) => s + d.value, 0);
+
   return (
-    <div className="shadow-card rounded-xl bg-card p-5">
-      <Tabs defaultValue="diarias">
-        <TabsList className="mb-4">
-          <TabsTrigger value="diarias" className="text-sm gap-1.5">
-            <Route className="h-3.5 w-3.5" /> Diárias
-          </TabsTrigger>
-          <TabsTrigger value="motoristas" className="text-sm gap-1.5">
-            <Users className="h-3.5 w-3.5" /> Motoristas
-          </TabsTrigger>
-        </TabsList>
+    <Tabs defaultValue="diarias">
+      <TabsList className="mb-4">
+        <TabsTrigger value="diarias" className="text-sm gap-1.5">
+          <Route className="h-3.5 w-3.5" /> Diárias
+        </TabsTrigger>
+        <TabsTrigger value="motoristas" className="text-sm gap-1.5">
+          <Users className="h-3.5 w-3.5" /> Motoristas
+        </TabsTrigger>
+      </TabsList>
 
-        <TabsContent value="motoristas">
-          <div className="space-y-4">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Nome do motorista"
-                value={newDriver}
-                onChange={(e) => setNewDriver(e.target.value)}
-                className="h-9 text-sm"
-                onKeyDown={(e) => e.key === "Enter" && handleAddDriver()}
-              />
-              <Button size="sm" className="h-9 gap-1" onClick={handleAddDriver}>
-                <UserPlus className="h-3.5 w-3.5" /> Adicionar
-              </Button>
-            </div>
-
-            {drivers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum motorista cadastrado. Adicione acima ou registre uma diária.</p>
-            ) : (
-              <div className="space-y-2">
-                {drivers.map((name) => {
-                  const driverData = byDriver.find(([n]) => n === name);
-                  return (
-                    <div key={name} className="flex items-center justify-between rounded-lg bg-accent/30 px-3 py-2">
-                      <div>
-                        <p className="text-sm font-medium">{name}</p>
-                        {driverData ? (
-                          <p className="text-xs text-muted-foreground">
-                            {driverData[1].routes} rotas · Salário:{" "}
-                            <span className="font-semibold text-foreground">
-                              {fmt(driverData[1].value)}
-                            </span>
-                          </p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">Sem diárias neste mês</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleRemoveDriver(name)}
-                        className="rounded p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-loss transition-colors"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="diarias">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Diárias dos Motoristas
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                R$ {VALUE_PER_ROUTE},00 por rota
-              </p>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1 text-xs"
-              onClick={() => setAdding(!adding)}
-            >
-              <Plus className="h-3 w-3" />
-              Registrar
+      <TabsContent value="motoristas">
+        <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card space-y-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Nome do motorista"
+              value={newDriver}
+              onChange={(e) => setNewDriver(e.target.value)}
+              className="h-9 text-sm"
+              onKeyDown={(e) => e.key === "Enter" && handleAddDriver()}
+            />
+            <Button size="sm" className="h-9 gap-1" onClick={handleAddDriver}>
+              <UserPlus className="h-3.5 w-3.5" /> Adicionar
             </Button>
           </div>
 
-          {adding && (
-            <div className="mb-4 space-y-2 rounded-lg border bg-muted/30 p-3">
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Label className="text-xs">Motorista</Label>
-                  {drivers.length > 0 ? (
-                    <Select value={driverName} onValueChange={setDriverName}>
-                      <SelectTrigger className="h-8 text-sm">
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {drivers.map((d) => (
-                          <SelectItem key={d} value={d}>{d}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input
-                      placeholder="Nome do motorista"
-                      value={driverName}
-                      onChange={(e) => setDriverName(e.target.value)}
-                      className="h-8 text-sm"
-                    />
-                  )}
-                </div>
-                <div className="w-20">
-                  <Label className="text-xs">Rotas</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={routes}
-                    onChange={(e) => setRoutes(e.target.value)}
-                    className="h-8 text-sm"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <Label className="text-xs">Data</Label>
-                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 text-sm" />
-                </div>
-                <div className="flex-1">
-                  <Label className="text-xs">Veículo</Label>
-                  <Select value={vehicle} onValueChange={setVehicle}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getVehicles().filter((v) => v !== "Geral").map((v) => (
-                        <SelectItem key={v} value={v}>{getVehicleName(v)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-xs text-muted-foreground">
-                  Total: R$ {(parseInt(routes || "0") * VALUE_PER_ROUTE).toFixed(2)}
-                </span>
-                <Button size="sm" className="h-8" onClick={handleAdd}>
-                  Salvar
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Summary by driver with salary and payment status */}
-          {byDriver.length > 0 && (
-            <div className="mb-4 space-y-1.5">
-              <h4 className="text-xs font-medium text-muted-foreground mb-2">Salário do Mês — Pagamento</h4>
-              {byDriver.map(([name, data]) => {
-                const exp = getDriverExpense(name);
-                const isPaid = exp?.status === "pago";
+          {drivers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum motorista cadastrado.</p>
+          ) : (
+            <div className="space-y-2">
+              {drivers.map((name) => {
+                const driverData = byDriver.find(([n]) => n === name);
                 return (
-                  <div
-                    key={name}
-                    className={`flex items-center justify-between rounded-lg px-3 py-2.5 border ${
-                      isPaid ? "bg-profit/5 border-profit/20" : "bg-warning/5 border-warning/30"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      {isPaid ? (
-                        <CheckCircle2 className="h-4 w-4 text-profit shrink-0" />
-                      ) : (
-                        <Clock className="h-4 w-4 text-warning shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{name}</p>
+                  <div key={name} className="flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium">{name}</p>
+                      {driverData ? (
                         <p className="text-xs text-muted-foreground">
-                          {data.routes} rotas · {isPaid ? "Pago" : "Pendente"}
+                          {driverData[1].routes} rotas · {fmt(driverData[1].value)}
                         </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 ml-2">
-                      <span className={`text-sm font-bold tabular-nums ${isPaid ? "text-profit" : "text-warning"}`}>
-                        {fmt(data.value)}
-                      </span>
-                      {isPaid ? (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-warning hover:bg-warning/10"
-                          onClick={() => handleMarkPending(name)}
-                          title="Voltar para pendente"
-                        >
-                          <Clock className="h-3.5 w-3.5" />
-                        </Button>
                       ) : (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-profit hover:bg-profit/10"
-                          onClick={() => handleMarkPaid(name)}
-                          title="Marcar como pago"
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <p className="text-xs text-muted-foreground">Sem diárias neste mês</p>
                       )}
                     </div>
+                    <button
+                      onClick={() => handleRemoveDriver(name)}
+                      className="rounded p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-loss transition-colors"
+                      aria-label={`Remover ${name}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 );
               })}
-
-              {/* Total pending */}
-              {(() => {
-                const pendingTotal = byDriver
-                  .filter(([name]) => getDriverExpense(name)?.status !== "pago")
-                  .reduce((s, [, d]) => s + d.value, 0);
-                return pendingTotal > 0 ? (
-                  <div className="flex items-center justify-between rounded-lg bg-warning/10 px-3 py-2 mt-2">
-                    <span className="text-xs font-semibold text-warning">Total Pendente</span>
-                    <span className="text-sm font-bold tabular-nums text-warning">{fmt(pendingTotal)}</span>
-                  </div>
-                ) : null;
-              })()}
             </div>
           )}
+        </div>
+      </TabsContent>
 
-          {/* Recent entries */}
-          {filtered.length > 0 ? (
-            <div className="space-y-1">
-              <h4 className="text-xs font-medium text-muted-foreground mb-2">Registros</h4>
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {filtered.slice(0, 20).map((d) => (
+      <TabsContent value="diarias">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+          {/* LEFT: Registros individuais */}
+          <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card lg:col-span-3">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+                  Registros de Diárias
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  R$ {VALUE_PER_ROUTE},00 por rota
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1 text-xs"
+                onClick={() => setAdding(!adding)}
+              >
+                <Plus className="h-3 w-3" />
+                Registrar
+              </Button>
+            </div>
+
+            {adding && (
+              <div className="mb-4 space-y-2 rounded-xl border border-border/50 bg-muted/30 p-3">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label className="text-xs">Motorista</Label>
+                    {drivers.length > 0 ? (
+                      <Select value={driverName} onValueChange={setDriverName}>
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {drivers.map((d) => (
+                            <SelectItem key={d} value={d}>{d}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder="Nome do motorista"
+                        value={driverName}
+                        onChange={(e) => setDriverName(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    )}
+                  </div>
+                  <div className="w-20">
+                    <Label className="text-xs">Rotas</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={routes}
+                      onChange={(e) => setRoutes(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Label className="text-xs">Data</Label>
+                    <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 text-sm" />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs">Veículo</Label>
+                    <Select value={vehicle} onValueChange={setVehicle}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getVehicles().filter((v) => v !== "Geral").map((v) => (
+                          <SelectItem key={v} value={v}>{getVehicleName(v)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs text-muted-foreground">
+                    Total: R$ {(parseInt(routes || "0") * VALUE_PER_ROUTE).toFixed(2)}
+                  </span>
+                  <Button size="sm" className="h-8" onClick={handleAdd}>
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Individual entries list */}
+            {filtered.length > 0 ? (
+              <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+                {filtered.map((d) => (
                   <div
                     key={d.id}
-                    className="flex items-center justify-between rounded-lg px-3 py-1.5 border border-border/50 hover:bg-accent/30 transition-colors"
+                    className="flex items-center justify-between rounded-xl px-3 py-2 border border-border/30 hover:bg-accent/30 transition-colors"
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Route className="h-3.5 w-3.5 text-muted-foreground" />
+                      <Route className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <div className="min-w-0">
-                        <p className="text-sm truncate">
+                        <p className="text-sm font-medium truncate">
                           {d.driverName} — {d.routes} rota{d.routes > 1 ? "s" : ""}
                         </p>
                         <p className="text-xs text-muted-foreground">
@@ -437,12 +368,13 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 ml-2">
-                      <span className="text-sm tabular-nums font-medium whitespace-nowrap">
-                        R$ {(d.routes * d.valuePerRoute).toFixed(2)}
+                      <span className="text-sm tabular-nums font-semibold whitespace-nowrap">
+                        {fmt(d.routes * d.valuePerRoute)}
                       </span>
                       <button
                         onClick={() => handleDelete(d.id)}
-                        className="rounded p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-loss"
+                        className="rounded-lg p-1 text-muted-foreground/40 hover:bg-destructive/10 hover:text-loss transition-colors"
+                        aria-label={`Remover diária de ${d.driverName}`}
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -450,22 +382,121 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
                   </div>
                 ))}
               </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Nenhuma diária registrada neste mês.</p>
-          )}
+            ) : (
+              <div className="flex h-24 flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
+                <Route className="h-5 w-5 text-muted-foreground/50" />
+                <p>Nenhuma diária registrada neste mês.</p>
+              </div>
+            )}
 
-          {/* Totals */}
-          {filtered.length > 0 && (
-            <div className="mt-3 flex items-center justify-between border-t pt-3">
-              <span className="text-xs text-muted-foreground">{totalRoutes} rotas no mês</span>
-              <span className="text-sm font-bold tabular-nums">
-                {fmt(totalValue)}
-              </span>
+            {/* Month totals */}
+            {filtered.length > 0 && (
+              <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
+                <span className="text-xs text-muted-foreground font-medium">{totalRoutes} rotas no mês</span>
+                <span className="text-sm font-bold tabular-nums">{fmt(totalValue)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT: Somatória por motorista + status de pagamento */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Summary card */}
+            <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card">
+              <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-4">
+                Somatória do Mês
+              </h3>
+
+              {byDriver.length > 0 ? (
+                <div className="space-y-2.5">
+                  {byDriver.map(([name, data]) => {
+                    const exp = getDriverExpense(name);
+                    const isPaid = exp?.status === "pago";
+                    return (
+                      <div
+                        key={name}
+                        className={`flex items-center justify-between rounded-xl px-4 py-3 border ${
+                          isPaid ? "bg-profit/5 border-profit/20" : "bg-warning/5 border-warning/30"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          {isPaid ? (
+                            <CheckCircle2 className="h-4 w-4 text-profit shrink-0" />
+                          ) : (
+                            <Clock className="h-4 w-4 text-warning shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate">{name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {data.routes} rotas · {isPaid ? "Pago" : "Pendente"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-2">
+                          <span className={`text-sm font-bold tabular-nums ${isPaid ? "text-profit" : "text-warning"}`}>
+                            {fmt(data.value)}
+                          </span>
+                          {isPaid ? (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-warning hover:bg-warning/10"
+                              onClick={() => handleMarkPending(name)}
+                              title="Voltar para pendente"
+                            >
+                              <Clock className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-profit hover:bg-profit/10"
+                              onClick={() => handleMarkPaid(name)}
+                              title="Marcar como pago"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Registre diárias para ver a somatória.</p>
+              )}
+
+              {/* Totals */}
+              {byDriver.length > 0 && (
+                <div className="mt-4 space-y-2 border-t border-border/50 pt-4">
+                  {pendingTotal > 0 && (
+                    <div className="flex items-center justify-between rounded-xl bg-warning/10 px-4 py-2.5">
+                      <span className="text-xs font-semibold text-warning">Total Pendente</span>
+                      <span className="text-sm font-bold tabular-nums text-warning">{fmt(pendingTotal)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-2.5">
+                    <span className="text-xs font-semibold text-muted-foreground">Total Geral do Mês</span>
+                    <span className="text-sm font-bold tabular-nums">{fmt(totalValue)}</span>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </TabsContent>
-      </Tabs>
-    </div>
+
+            {/* Info card */}
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-card">
+              <div className="flex items-start gap-2">
+                <DollarSign className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Como funciona</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Cada diária registrada soma no total do motorista. O valor acumulado aparece automaticamente como <strong>pagamento pendente</strong> até ser marcado como pago.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </TabsContent>
+    </Tabs>
   );
 }
