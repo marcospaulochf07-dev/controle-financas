@@ -171,7 +171,7 @@ const Index = () => {
           <TabsContent value="lancamentos">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div className="shadow-card rounded-xl bg-card p-5 lg:col-span-2">
-                <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Lançamentos — {MONTHS[month]} {year}
                 </h3>
                 <ExpenseTable expenses={filtered} onDelete={handleDelete} />
