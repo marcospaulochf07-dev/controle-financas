@@ -28,19 +28,17 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
   const [vehicle, setVehicle] = useState("Van 01");
   const [newDriver, setNewDriver] = useState("");
 
+  const { dailies: allDailies, refresh: refreshDailies } = useDriverDailies();
+
   const refresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
+    refreshDailies();
     onUpdated();
-  }, [onUpdated]);
+  }, [onUpdated, refreshDailies]);
 
   const drivers = useMemo(() => {
     void refreshKey;
     return getDrivers();
-  }, [refreshKey]);
-
-  const allDailies = useMemo(() => {
-    void refreshKey;
-    return getDriverDailies();
   }, [refreshKey]);
 
   const filtered = useMemo(() => {
