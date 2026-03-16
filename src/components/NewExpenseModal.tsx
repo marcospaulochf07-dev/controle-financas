@@ -101,7 +101,7 @@ export function NewExpenseModal({ open, onClose, onSaved }: Props) {
                 <Select value={vehicle} onValueChange={setVehicle}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {VEHICLES.map((v) => (
+                    {getVehicles().map((v) => (
                       <SelectItem key={v} value={v}>{v}</SelectItem>
                     ))}
                   </SelectContent>

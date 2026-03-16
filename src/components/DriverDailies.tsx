@@ -135,7 +135,7 @@ export function DriverDailies({ year, month }: Props) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {VEHICLES.filter((v) => v !== "Geral").map((v) => (
+                  {getVehicles().filter((v) => v !== "Geral").map((v) => (
                     <SelectItem key={v} value={v}>{getVehicleName(v)}</SelectItem>
                   ))}
                 </SelectContent>
