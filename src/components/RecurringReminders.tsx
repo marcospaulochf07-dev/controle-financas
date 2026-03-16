@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Bell, Plus, Trash2, CheckCircle2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RecurringReminder, ExpenseCategory, SORTED_CATEGORIES, CATEGORY_LABELS } from "@/lib/types";
 import { getRecurringReminders, saveRecurringReminder, deleteRecurringReminder, toggleRecurringReminderPaid, saveExpense } from "@/lib/store";
 import { toast } from "sonner";
-import { useExpenses } from "@/hooks/use-expenses";
+import { supabase } from "@/integrations/supabase/client";
 
 const DEFAULT_RECURRING: Omit<RecurringReminder, "id">[] = [
   { label: "Contador", dayOfMonth: 10, amount: 810, category: "contador" },
@@ -54,39 +54,43 @@ function checkMonthlyReset() {
   }
 }
 
-// Sync recurring reminders as pending expenses in the DB for current month (returns true if any created)
-async function syncRecurringToExpenses(reminders: RecurringReminder[], expenses: { category: string; source?: string; description: string; date: string }[]): Promise<boolean> {
+// Sync recurring reminders as pending expenses in the DB for current month (queries DB directly to avoid stale state)
+async function syncRecurringToExpenses(reminders: RecurringReminder[]): Promise<boolean> {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
   const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const startDate = `${monthStr}-01`;
+  const endDate = month === 11 ? `${year + 1}-01-01` : `${year}-${String(month + 2).padStart(2, "0")}-01`;
   let created = false;
 
   for (const r of reminders) {
     if (r.amount <= 0) continue;
     if (r.category === "diaria") continue;
 
-    // Check if expense already exists for this recurring item this month
-    const alreadyExists = expenses.some((e) => {
-      const d = new Date(e.date);
-      return (e.source === "recorrente-auto") &&
-        e.description === r.label &&
-        d.getFullYear() === year && d.getMonth() === month;
-    });
+    // Query DB directly for existence check (avoids stale state)
+    const { data } = await supabase
+      .from("expenses")
+      .select("id")
+      .eq("source", "recorrente-auto")
+      .eq("description", r.label)
+      .gte("date", startDate)
+      .lt("date", endDate)
+      .limit(1);
 
-    if (!alreadyExists) {
-      const day = Math.min(r.dayOfMonth, 28);
-      await saveExpense({
-        date: `${monthStr}-${String(day).padStart(2, "0")}`,
-        category: r.category,
-        description: r.label,
-        vehicle: "Geral",
-        amount: r.amount,
-        status: "pendente",
-        source: "recorrente-auto",
-      });
-      created = true;
-    }
+    if (data && data.length > 0) continue;
+
+    const day = Math.min(r.dayOfMonth, 28);
+    await saveExpense({
+      date: `${monthStr}-${String(day).padStart(2, "0")}`,
+      category: r.category,
+      description: r.label,
+      vehicle: "Geral",
+      amount: r.amount,
+      status: "pendente",
+      source: "recorrente-auto",
+    });
+    created = true;
   }
   return created;
 }
@@ -98,7 +102,7 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
   const [day, setDay] = useState("5");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<ExpenseCategory>("imposto");
-  const { expenses: allExpenses } = useExpenses();
+  const syncingRef = useRef(false);
 
   useEffect(() => {
     seedDefaults();
@@ -116,16 +120,24 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
     });
   }, [refreshKey, driverDailiesTotal]);
 
-  // Auto-sync: create pending expenses for recurring costs at start of each month
+  // Auto-sync: create pending expenses for recurring costs — once per month only
   useEffect(() => {
-    if (allExpenses.length === 0 && reminders.length === 0) return;
-    syncRecurringToExpenses(reminders, allExpenses).then((created) => {
+    if (reminders.length === 0 || syncingRef.current) return;
+
+    const currentMonth = getMonthKey();
+    const lastSync = localStorage.getItem("recurring-sync-month");
+    if (lastSync === currentMonth) return;
+
+    syncingRef.current = true;
+    syncRecurringToExpenses(reminders).then((created) => {
+      localStorage.setItem("recurring-sync-month", currentMonth);
+      syncingRef.current = false;
       if (created) {
         onUpdated();
         toast.success("Custos fixos lançados como pagamentos pendentes do mês.");
       }
-    });
-  }, [reminders, allExpenses]); // eslint-disable-line react-hooks/exhaustive-deps
+    }).catch(() => { syncingRef.current = false; });
+  }, [reminders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = () => {
     setRefreshKey((k) => k + 1);
