@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ExpenseCategory, CATEGORY_LABELS, SORTED_CATEGORIES, VEHICLES } from "@/lib/types";
+import { ExpenseCategory, CATEGORY_LABELS, SORTED_CATEGORIES, getVehicles } from "@/lib/types";
 import { saveExpense } from "@/lib/store";
 import { toast } from "sonner";
 

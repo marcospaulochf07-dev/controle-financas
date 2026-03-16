@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { VEHICLES } from "@/lib/types";
+import { getVehicles } from "@/lib/types";
 import { getDriverDailies, saveDriverDaily, deleteDriverDaily, getVehicleName } from "@/lib/store";
 import { toast } from "sonner";
 
