@@ -54,11 +54,11 @@ export async function saveExpense(expense: Omit<Expense, "id">): Promise<Expense
   return {
     id: data.id,
     date: data.date,
-    category: data.category,
+    category: data.category as Expense["category"],
     description: data.description,
     vehicle: data.vehicle,
     amount: Number(data.amount),
-    status: data.status,
+    status: data.status as Expense["status"],
   };
 }
 
