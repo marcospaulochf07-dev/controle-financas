@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      driver_dailies: {
+        Row: {
+          created_at: string
+          date: string
+          driver_name: string
+          id: string
+          routes: number
+          source: string
+          value_per_route: number
+          vehicle: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          driver_name: string
+          id?: string
+          routes?: number
+          source?: string
+          value_per_route?: number
+          vehicle?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          driver_name?: string
+          id?: string
+          routes?: number
+          source?: string
+          value_per_route?: number
+          vehicle?: string
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           amount: number
