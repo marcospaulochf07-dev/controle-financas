@@ -55,7 +55,7 @@ function checkMonthlyReset() {
 }
 
 // Sync recurring reminders as pending expenses in the DB for current month
-async function syncRecurringToExpenses(reminders: RecurringReminder[], expenses: { category: string; source: string; description: string; date: string }[]) {
+async function syncRecurringToExpenses(reminders: RecurringReminder[], expenses: { category: string; source?: string; description: string; date: string }[]) {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
