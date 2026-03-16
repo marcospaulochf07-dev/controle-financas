@@ -1,44 +1,81 @@
 import { Expense, RecurringReminder, DriverDaily } from "./types";
+import { supabase } from "@/integrations/supabase/client";
 
-const STORAGE_KEY = "route-expenses";
 const REVENUE_KEY = "route-revenue";
 const VEHICLE_NAMES_KEY = "route-vehicle-names";
 const RECURRING_KEY = "route-recurring-reminders";
 const DAILIES_KEY = "route-driver-dailies";
 const DRIVERS_KEY = "route-drivers-list";
 
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+// === Expenses (Supabase) ===
+export async function getExpenses(): Promise<Expense[]> {
+  const { data, error } = await supabase
+    .from("expenses")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching expenses:", error);
+    return [];
+  }
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    date: row.date,
+    category: row.category,
+    description: row.description,
+    vehicle: row.vehicle,
+    amount: Number(row.amount),
+    status: row.status,
+    source: row.source,
+  }));
 }
 
-// === Expenses ===
-export function getExpenses(): Expense[] {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  return JSON.parse(raw);
+export async function saveExpense(expense: Omit<Expense, "id">): Promise<Expense | null> {
+  const { data, error } = await supabase
+    .from("expenses")
+    .insert({
+      date: expense.date,
+      category: expense.category,
+      description: expense.description,
+      vehicle: expense.vehicle,
+      amount: expense.amount,
+      status: expense.status,
+      source: "manual",
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error saving expense:", error);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    date: data.date,
+    category: data.category,
+    description: data.description,
+    vehicle: data.vehicle,
+    amount: Number(data.amount),
+    status: data.status,
+  };
 }
 
-export function saveExpense(expense: Omit<Expense, "id">): Expense {
-  const expenses = getExpenses();
-  const newExpense = { ...expense, id: generateId() };
-  expenses.unshift(newExpense);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses));
-  return newExpense;
+export async function deleteExpense(id: string): Promise<void> {
+  const { error } = await supabase.from("expenses").delete().eq("id", id);
+  if (error) console.error("Error deleting expense:", error);
 }
 
-export function deleteExpense(id: string): void {
-  const expenses = getExpenses().filter((e) => e.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses));
+export async function updateExpenseStatus(id: string, status: "pago" | "pendente"): Promise<void> {
+  const { error } = await supabase
+    .from("expenses")
+    .update({ status })
+    .eq("id", id);
+  if (error) console.error("Error updating expense status:", error);
 }
 
-export function updateExpenseStatus(id: string, status: "pago" | "pendente"): void {
-  const expenses = getExpenses().map((e) =>
-    e.id === id ? { ...e, status } : e
-  );
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses));
-}
-
-// === Revenue ===
+// === Revenue (localStorage - keep for now) ===
 export function getMonthlyRevenue(month: string): number {
   const revenues = JSON.parse(localStorage.getItem(REVENUE_KEY) || "{}");
   return revenues[month] || 0;
@@ -133,4 +170,8 @@ export function saveDriverDaily(daily: Omit<DriverDaily, "id">): DriverDaily {
 export function deleteDriverDaily(id: string): void {
   const dailies = getDriverDailies().filter((d) => d.id !== id);
   localStorage.setItem(DAILIES_KEY, JSON.stringify(dailies));
+}
+
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
 }
