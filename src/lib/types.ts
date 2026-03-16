@@ -23,9 +23,10 @@ export interface Expense {
 export interface RecurringReminder {
   id: string;
   label: string;
-  dayOfMonth: number; // dia do mês para lembrar
+  dayOfMonth: number;
   amount: number;
   category: ExpenseCategory;
+  paid?: boolean;
 }
 
 export interface DriverDaily {
