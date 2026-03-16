@@ -54,21 +54,22 @@ function checkMonthlyReset() {
   }
 }
 
-// Sync recurring reminders as pending expenses in the DB for current month
-async function syncRecurringToExpenses(reminders: RecurringReminder[], expenses: { category: string; source?: string; description: string; date: string }[]) {
+// Sync recurring reminders as pending expenses in the DB for current month (returns true if any created)
+async function syncRecurringToExpenses(reminders: RecurringReminder[], expenses: { category: string; source?: string; description: string; date: string }[]): Promise<boolean> {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
   const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
+  let created = false;
 
   for (const r of reminders) {
     if (r.amount <= 0) continue;
-    if (r.category === "diaria") continue; // dailies are handled separately
+    if (r.category === "diaria") continue;
 
     // Check if expense already exists for this recurring item this month
     const alreadyExists = expenses.some((e) => {
       const d = new Date(e.date);
-      return e.source === "recorrente-auto" &&
+      return (e.source === "recorrente-auto") &&
         e.description === r.label &&
         d.getFullYear() === year && d.getMonth() === month;
     });
@@ -84,8 +85,10 @@ async function syncRecurringToExpenses(reminders: RecurringReminder[], expenses:
         status: "pendente",
         source: "recorrente-auto",
       });
+      created = true;
     }
   }
+  return created;
 }
 
 export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props) {
@@ -113,12 +116,16 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
     });
   }, [refreshKey, driverDailiesTotal]);
 
-  // Sync recurring items to expenses table once when component mounts
+  // Sync recurring items to expenses table once per month (not duplicating)
+  const [synced, setSynced] = useState(false);
   useEffect(() => {
-    if (reminders.length > 0 && allExpenses.length >= 0) {
-      syncRecurringToExpenses(reminders, allExpenses).then(() => onUpdated());
+    if (!synced && reminders.length > 0) {
+      setSynced(true);
+      syncRecurringToExpenses(reminders, allExpenses).then((created) => {
+        if (created) onUpdated();
+      });
     }
-  }, []); // only on mount
+  }, [synced, reminders, allExpenses]);
 
   const refresh = () => {
     setRefreshKey((k) => k + 1);
