@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
-import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Plus, ChevronLeft, ChevronRight, BarChart3, FileText, Bell, Users, GitCompare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,6 +30,12 @@ function getMonthKey(year: number, month: number) {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
+const tabAnimVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
+  exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
+};
+
 const Index = () => {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -36,6 +43,7 @@ const Index = () => {
   const [vehicleFilter, setVehicleFilter] = useState("Todos");
   const [modalOpen, setModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activeTab, setActiveTab] = useState("lancamentos");
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -90,120 +98,187 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-30 border-b bg-card/80 backdrop-blur-sm">
+      <header className="sticky top-0 z-30 border-b border-border/50 gradient-header glass">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-3">
-            <img src={logo} alt="FV Freitas Vidal" className="h-10 w-auto" />
-            <div>
-              <h1 className="text-lg font-semibold">Gestor de Frota</h1>
-              <p className="text-xs text-muted-foreground">Freitas Vidal Serviços LTDA</p>
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex items-center gap-3"
+          >
+            <div className="rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 p-1.5">
+              <img src={logo} alt="FV Freitas Vidal" className="h-9 w-auto" />
             </div>
-          </div>
-          <Button onClick={() => setModalOpen(true)} size="sm" className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" />
-            Novo Lançamento
-          </Button>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight">Gestor de Frota</h1>
+              <p className="text-[11px] font-medium text-muted-foreground tracking-wide">FREITAS VIDAL SERVIÇOS LTDA</p>
+            </div>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <Button
+              onClick={() => setModalOpen(true)}
+              size="sm"
+              className="gap-1.5 rounded-xl font-semibold shadow-md hover:shadow-lg transition-shadow"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Novo Lançamento
+            </Button>
+          </motion.div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6">
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1">
-            <button onClick={prevMonth} className="rounded p-1 hover:bg-accent">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="flex flex-wrap items-center gap-3"
+        >
+          <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-card px-2 py-1 shadow-card">
+            <button onClick={prevMonth} className="rounded-lg p-1.5 hover:bg-accent transition-colors">
               <ChevronLeft className="h-4 w-4 text-muted-foreground" />
             </button>
-            <span className="min-w-[140px] text-center text-sm font-medium">
+            <span className="min-w-[150px] text-center text-sm font-bold tracking-tight">
               {MONTHS[month]} {year}
             </span>
-            <button onClick={nextMonth} className="rounded p-1 hover:bg-accent">
+            <button onClick={nextMonth} className="rounded-lg p-1.5 hover:bg-accent transition-colors">
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
           <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
-            <SelectTrigger className="h-8 w-36 text-xs">
+            <SelectTrigger className="h-9 w-40 rounded-xl border-border/50 text-xs font-medium shadow-card">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Todos">Todos</SelectItem>
+              <SelectItem value="Todos">Todos os veículos</SelectItem>
               {vehicles.map((v) => (
                 <SelectItem key={v} value={v}>{getVehicleName(v)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </motion.div>
 
         {/* Metrics */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
-            <MetricCard label="Receita Bruta (Usina)" value={revenue} />
-            <div className="mt-2 px-1">
+            <MetricCard label="Receita Bruta (Usina)" value={revenue} delay={0.1} />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="mt-2 px-1"
+            >
               <RevenueEditor month={monthKey} currentValue={revenue} onUpdated={refresh} />
-            </div>
+            </motion.div>
           </div>
-          <MetricCard label="Custo Operacional Total" value={totalCost} />
+          <MetricCard label="Custo Operacional Total" value={totalCost} delay={0.2} />
           <MetricCard
             label="Margem Líquida"
             value={margin}
             type={margin >= 0 ? "profit" : "loss"}
+            delay={0.3}
           />
         </div>
 
         {/* Pending Reminders Banner */}
-        {pendingExpenses.length > 0 && (
-          <div className="rounded-xl border-2 border-warning/40 bg-warning/10 p-4">
-            <PaymentReminders expenses={filtered} onMarkPaid={handleMarkPaid} />
-          </div>
-        )}
+        <AnimatePresence>
+          {pendingExpenses.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.4 }}
+              className="overflow-hidden"
+            >
+              <div className="rounded-2xl border-2 border-warning/30 bg-gradient-to-r from-warning/10 via-warning/5 to-transparent p-4">
+                <PaymentReminders expenses={filtered} onMarkPaid={handleMarkPaid} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Tabs */}
-        <Tabs defaultValue="lancamentos" className="w-full">
-          <TabsList className="w-full justify-start flex-wrap h-auto gap-1">
-            <TabsTrigger value="lancamentos" className="text-sm">Lançamentos</TabsTrigger>
-            <TabsTrigger value="lembretes" className="text-sm">Lembretes</TabsTrigger>
-            <TabsTrigger value="diarias" className="text-sm">Diárias</TabsTrigger>
-            <TabsTrigger value="graficos" className="text-sm">Gráficos</TabsTrigger>
-            <TabsTrigger value="comparativo" className="text-sm">Comparativo</TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3 }}
+          >
+            <TabsList className="w-full justify-start flex-wrap h-auto gap-1.5 bg-transparent p-0 mb-4">
+              {[
+                { value: "lancamentos", label: "Lançamentos", icon: FileText },
+                { value: "lembretes", label: "Lembretes", icon: Bell },
+                { value: "diarias", label: "Diárias", icon: Users },
+                { value: "graficos", label: "Gráficos", icon: BarChart3 },
+                { value: "comparativo", label: "Comparativo", icon: GitCompare },
+              ].map(({ value, label, icon: TabIcon }) => (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className="gap-1.5 rounded-xl border border-transparent px-4 py-2 text-sm font-semibold transition-all data-[state=active]:border-primary/20 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-sm hover:bg-accent/60"
+                >
+                  <TabIcon className="h-3.5 w-3.5" />
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </motion.div>
 
-          <TabsContent value="lancamentos">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div className="shadow-card rounded-xl bg-card p-5 lg:col-span-2">
-                <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Lançamentos — {MONTHS[month]} {year}
-                </h3>
-                <ExpenseTable expenses={filtered} onDelete={handleDelete} />
-              </div>
-              <div className="space-y-6">
-                <CostBreakdown expenses={filtered} />
-                <VehicleManager onUpdated={refresh} />
-              </div>
-            </div>
-          </TabsContent>
+          <AnimatePresence mode="wait">
+            <TabsContent value="lancamentos" key="lancamentos" asChild>
+              <motion.div variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                  <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card lg:col-span-2">
+                    <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                      Lançamentos — {MONTHS[month]} {year}
+                    </h3>
+                    <ExpenseTable expenses={filtered} onDelete={handleDelete} />
+                  </div>
+                  <div className="space-y-6">
+                    <CostBreakdown expenses={filtered} />
+                    <VehicleManager onUpdated={refresh} />
+                  </div>
+                </div>
+              </motion.div>
+            </TabsContent>
 
-          <TabsContent value="lembretes">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <PaymentReminders expenses={filtered} onMarkPaid={handleMarkPaid} />
-              <RecurringReminders onUpdated={refresh} />
-            </div>
-          </TabsContent>
+            <TabsContent value="lembretes" key="lembretes" asChild>
+              <motion.div variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                  <PaymentReminders expenses={filtered} onMarkPaid={handleMarkPaid} />
+                  <RecurringReminders onUpdated={refresh} />
+                </div>
+              </motion.div>
+            </TabsContent>
 
-          <TabsContent value="diarias">
-            <DriverDailies year={year} month={month} />
-          </TabsContent>
+            <TabsContent value="diarias" key="diarias" asChild>
+              <motion.div variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
+                <DriverDailies year={year} month={month} />
+              </motion.div>
+            </TabsContent>
 
-          <TabsContent value="graficos">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <RevenueChart year={year} />
-              <CostPieChart expenses={filtered} />
-            </div>
-          </TabsContent>
+            <TabsContent value="graficos" key="graficos" asChild>
+              <motion.div variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                  <RevenueChart year={year} />
+                  <CostPieChart expenses={filtered} />
+                </div>
+              </motion.div>
+            </TabsContent>
 
-          <TabsContent value="comparativo">
-            <MonthComparison year={year} month={month} />
-          </TabsContent>
+            <TabsContent value="comparativo" key="comparativo" asChild>
+              <motion.div variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
+                <MonthComparison year={year} month={month} />
+              </motion.div>
+            </TabsContent>
+          </AnimatePresence>
         </Tabs>
       </main>
 

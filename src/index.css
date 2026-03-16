@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Space+Grotesk:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,52 +6,62 @@
 
 @layer base {
   :root {
-    --background: 240 5% 98%;
-    --foreground: 240 10% 4%;
+    --background: 220 14% 96%;
+    --foreground: 220 20% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 4%;
+    --card-foreground: 220 20% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 4%;
+    --popover-foreground: 220 20% 10%;
 
-    --primary: 142 71% 45%;
+    --primary: 152 60% 42%;
     --primary-foreground: 0 0% 100%;
+    --primary-glow: 152 70% 55%;
 
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 10% 4%;
+    --secondary: 220 14% 94%;
+    --secondary-foreground: 220 20% 10%;
 
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 5% 46%;
+    --muted: 220 14% 94%;
+    --muted-foreground: 220 10% 46%;
 
-    --accent: 240 5% 94%;
-    --accent-foreground: 240 10% 4%;
+    --accent: 220 14% 92%;
+    --accent-foreground: 220 20% 10%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
     --warning: 38 92% 50%;
     --warning-foreground: 38 92% 20%;
 
-    --profit: 142 71% 35%;
-    --loss: 0 84% 55%;
+    --profit: 152 60% 38%;
+    --loss: 0 72% 51%;
 
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 142 71% 45%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 152 60% 42%;
 
-    --radius: 0.375rem;
+    --radius: 0.625rem;
 
-    --shadow-card: 0 0 0 1px rgba(0,0,0,.04), 0 2px 4px rgba(0,0,0,.02), 0 8px 16px rgba(0,0,0,.02);
+    --shadow-card: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03);
+    --shadow-card-hover: 0 2px 8px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.06);
+    --shadow-elevated: 0 4px 16px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.06);
+
+    --gradient-primary: linear-gradient(135deg, hsl(152 60% 42%), hsl(152 70% 55%));
+    --gradient-revenue: linear-gradient(135deg, hsl(152 60% 42%), hsl(180 60% 45%));
+    --gradient-cost: linear-gradient(135deg, hsl(0 72% 51%), hsl(20 80% 55%));
+    --gradient-margin-profit: linear-gradient(135deg, hsl(152 60% 38%), hsl(142 50% 45%));
+    --gradient-margin-loss: linear-gradient(135deg, hsl(0 72% 51%), hsl(340 70% 50%));
+    --gradient-header: linear-gradient(180deg, hsl(0 0% 100% / 0.95), hsl(0 0% 100% / 0.8));
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 142 71% 45%;
+    --sidebar-foreground: 220 10% 26%;
+    --sidebar-primary: 152 60% 42%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 240 6% 92%;
-    --sidebar-ring: 142 71% 45%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 220 10% 10%;
+    --sidebar-border: 220 13% 93%;
+    --sidebar-ring: 152 60% 42%;
   }
 }
 
@@ -62,11 +72,14 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-  /* Tabular nums for all financial values */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', 'DM Sans', system-ui, sans-serif;
+  }
+
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
@@ -75,5 +88,60 @@
 @layer utilities {
   .shadow-card {
     box-shadow: var(--shadow-card);
+  }
+
+  .shadow-card-hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-revenue {
+    background: var(--gradient-revenue);
+  }
+
+  .gradient-cost {
+    background: var(--gradient-cost);
+  }
+
+  .gradient-header {
+    background: var(--gradient-header);
+  }
+
+  .glass {
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  .card-shine {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card-shine::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -75%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(0 0% 100% / 0.08),
+      transparent
+    );
+    transform: skewX(-25deg);
+    transition: left 0.8s ease;
+  }
+
+  .card-shine:hover::before {
+    left: 125%;
   }
 }
