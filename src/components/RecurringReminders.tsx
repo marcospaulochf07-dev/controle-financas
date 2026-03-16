@@ -113,12 +113,16 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
     });
   }, [refreshKey, driverDailiesTotal]);
 
-  // Sync recurring items to expenses table once when component mounts
+  // Sync recurring items to expenses table once per month (not duplicating)
+  const [synced, setSynced] = useState(false);
   useEffect(() => {
-    if (reminders.length > 0 && allExpenses.length >= 0) {
-      syncRecurringToExpenses(reminders, allExpenses).then(() => onUpdated());
+    if (!synced && reminders.length > 0) {
+      setSynced(true);
+      syncRecurringToExpenses(reminders, allExpenses).then((created) => {
+        if (created) onUpdated();
+      });
     }
-  }, []); // only on mount
+  }, [synced, reminders, allExpenses]);
 
   const refresh = () => {
     setRefreshKey((k) => k + 1);
