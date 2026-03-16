@@ -161,11 +161,11 @@ const Index = () => {
         {/* Tabs */}
         <Tabs defaultValue="lancamentos" className="w-full">
           <TabsList className="w-full justify-start flex-wrap h-auto gap-1">
-            <TabsTrigger value="lancamentos" className="text-xs">Lançamentos</TabsTrigger>
-            <TabsTrigger value="lembretes" className="text-xs">Lembretes</TabsTrigger>
-            <TabsTrigger value="diarias" className="text-xs">Diárias</TabsTrigger>
-            <TabsTrigger value="graficos" className="text-xs">Gráficos</TabsTrigger>
-            <TabsTrigger value="comparativo" className="text-xs">Comparativo</TabsTrigger>
+            <TabsTrigger value="lancamentos" className="text-sm">Lançamentos</TabsTrigger>
+            <TabsTrigger value="lembretes" className="text-sm">Lembretes</TabsTrigger>
+            <TabsTrigger value="diarias" className="text-sm">Diárias</TabsTrigger>
+            <TabsTrigger value="graficos" className="text-sm">Gráficos</TabsTrigger>
+            <TabsTrigger value="comparativo" className="text-sm">Comparativo</TabsTrigger>
           </TabsList>
 
           <TabsContent value="lancamentos">
