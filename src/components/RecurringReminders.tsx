@@ -116,23 +116,7 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
     });
   }, [refreshKey, driverDailiesTotal]);
 
-  // Auto-sync recurring items as pending expenses once per month
-  useEffect(() => {
-    const SYNC_KEY = "recurring-sync-month";
-    const currentMonth = getMonthKey();
-    const lastSync = localStorage.getItem(SYNC_KEY);
-
-    if (lastSync !== currentMonth && reminders.length > 0) {
-      syncRecurringToExpenses(reminders, allExpenses).then((created) => {
-        if (created) {
-          localStorage.setItem(SYNC_KEY, currentMonth);
-          onUpdated();
-        } else {
-          localStorage.setItem(SYNC_KEY, currentMonth);
-        }
-      });
-    }
-  }, [reminders, allExpenses, onUpdated]);
+  // Auto-sync disabled to avoid duplication — recurring costs are managed only in this component
 
   const refresh = () => {
     setRefreshKey((k) => k + 1);
