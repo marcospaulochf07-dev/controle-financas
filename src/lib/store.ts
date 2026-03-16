@@ -5,6 +5,7 @@ const REVENUE_KEY = "route-revenue";
 const VEHICLE_NAMES_KEY = "route-vehicle-names";
 const RECURRING_KEY = "route-recurring-reminders";
 const DAILIES_KEY = "route-driver-dailies";
+const DRIVERS_KEY = "route-drivers-list";
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
@@ -85,6 +86,33 @@ export function saveRecurringReminder(reminder: Omit<RecurringReminder, "id">): 
 export function deleteRecurringReminder(id: string): void {
   const reminders = getRecurringReminders().filter((r) => r.id !== id);
   localStorage.setItem(RECURRING_KEY, JSON.stringify(reminders));
+}
+
+export function toggleRecurringReminderPaid(id: string): void {
+  const reminders = getRecurringReminders().map((r) =>
+    r.id === id ? { ...r, paid: !r.paid } : r
+  );
+  localStorage.setItem(RECURRING_KEY, JSON.stringify(reminders));
+}
+
+// === Drivers ===
+export function getDrivers(): string[] {
+  const raw = localStorage.getItem(DRIVERS_KEY);
+  if (raw) return JSON.parse(raw);
+  return [];
+}
+
+export function addDriver(name: string): void {
+  const drivers = getDrivers();
+  if (!drivers.includes(name)) {
+    drivers.push(name);
+    localStorage.setItem(DRIVERS_KEY, JSON.stringify(drivers));
+  }
+}
+
+export function removeDriver(name: string): void {
+  const drivers = getDrivers().filter((d) => d !== name);
+  localStorage.setItem(DRIVERS_KEY, JSON.stringify(drivers));
 }
 
 // === Driver Dailies ===

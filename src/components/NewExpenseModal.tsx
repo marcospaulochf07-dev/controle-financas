@@ -23,7 +23,7 @@ interface Props {
 
 export function NewExpenseModal({ open, onClose, onSaved }: Props) {
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [category, setCategory] = useState<ExpenseCategory>("combustivel");
+  const [category, setCategory] = useState<ExpenseCategory>("manutencao");
   const [description, setDescription] = useState("");
   const [vehicle, setVehicle] = useState("Geral");
   const [amount, setAmount] = useState("");

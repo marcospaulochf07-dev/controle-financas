@@ -1,5 +1,4 @@
 export type ExpenseCategory =
-  | "combustivel"
   | "contador"
   | "diaria"
   | "fgts"
@@ -24,9 +23,10 @@ export interface Expense {
 export interface RecurringReminder {
   id: string;
   label: string;
-  dayOfMonth: number; // dia do mês para lembrar
+  dayOfMonth: number;
   amount: number;
   category: ExpenseCategory;
+  paid?: boolean;
 }
 
 export interface DriverDaily {
@@ -40,7 +40,6 @@ export interface DriverDaily {
 
 // Sorted alphabetically
 export const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
-  combustivel: "Combustível",
   contador: "Contador",
   diaria: "Diária",
   fgts: "FGTS",

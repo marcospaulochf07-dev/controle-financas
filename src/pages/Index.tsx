@@ -97,7 +97,7 @@ const Index = () => {
           <div className="flex items-center gap-3">
             <img src={logo} alt="FV Freitas Vidal" className="h-10 w-auto" />
             <div>
-              <h1 className="text-lg font-semibold">Gestor de Rota</h1>
+              <h1 className="text-lg font-semibold">Gestor de Frota</h1>
               <p className="text-xs text-muted-foreground">Freitas Vidal Serviços LTDA</p>
             </div>
           </div>
@@ -161,17 +161,17 @@ const Index = () => {
         {/* Tabs */}
         <Tabs defaultValue="lancamentos" className="w-full">
           <TabsList className="w-full justify-start flex-wrap h-auto gap-1">
-            <TabsTrigger value="lancamentos" className="text-xs">Lançamentos</TabsTrigger>
-            <TabsTrigger value="lembretes" className="text-xs">Lembretes</TabsTrigger>
-            <TabsTrigger value="diarias" className="text-xs">Diárias</TabsTrigger>
-            <TabsTrigger value="graficos" className="text-xs">Gráficos</TabsTrigger>
-            <TabsTrigger value="comparativo" className="text-xs">Comparativo</TabsTrigger>
+            <TabsTrigger value="lancamentos" className="text-sm">Lançamentos</TabsTrigger>
+            <TabsTrigger value="lembretes" className="text-sm">Lembretes</TabsTrigger>
+            <TabsTrigger value="diarias" className="text-sm">Diárias</TabsTrigger>
+            <TabsTrigger value="graficos" className="text-sm">Gráficos</TabsTrigger>
+            <TabsTrigger value="comparativo" className="text-sm">Comparativo</TabsTrigger>
           </TabsList>
 
           <TabsContent value="lancamentos">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               <div className="shadow-card rounded-xl bg-card p-5 lg:col-span-2">
-                <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Lançamentos — {MONTHS[month]} {year}
                 </h3>
                 <ExpenseTable expenses={filtered} onDelete={handleDelete} />
