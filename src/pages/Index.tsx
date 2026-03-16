@@ -9,14 +9,16 @@ import { NewExpenseModal } from "@/components/NewExpenseModal";
 import { RevenueEditor } from "@/components/RevenueEditor";
 import { CostBreakdown } from "@/components/CostBreakdown";
 import { RevenueChart } from "@/components/RevenueChart";
+import { CostPieChart } from "@/components/CostPieChart";
 import { PaymentReminders } from "@/components/PaymentReminders";
 import { MonthComparison } from "@/components/MonthComparison";
 import { VehicleManager } from "@/components/VehicleManager";
 import { DriverDailies } from "@/components/DriverDailies";
 import { RecurringReminders } from "@/components/RecurringReminders";
 import { getExpenses, deleteExpense, getMonthlyRevenue, getVehicleName, updateExpenseStatus } from "@/lib/store";
-import { VEHICLES } from "@/lib/types";
+import { getVehicles } from "@/lib/types";
 import { toast } from "sonner";
+import logo from "@/assets/logo.png";
 
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -39,6 +41,11 @@ const Index = () => {
 
   const monthKey = getMonthKey(year, month);
 
+  const vehicles = useMemo(() => {
+    void refreshKey;
+    return getVehicles();
+  }, [refreshKey]);
+
   const allExpenses = useMemo(() => {
     void refreshKey;
     return getExpenses();
@@ -56,6 +63,11 @@ const Index = () => {
   const totalCost = filtered.reduce((s, e) => s + e.amount, 0);
   const revenue = getMonthlyRevenue(monthKey);
   const margin = revenue - totalCost;
+
+  const pendingExpenses = useMemo(
+    () => filtered.filter((e) => e.status === "pendente"),
+    [filtered]
+  );
 
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear(year - 1); }
@@ -82,9 +94,12 @@ const Index = () => {
       {/* Header */}
       <header className="sticky top-0 z-30 border-b bg-card/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-          <div>
-            <h1 className="text-lg font-semibold">Gestor de Rota</h1>
-            <p className="text-xs text-muted-foreground">Controle de custos operacionais</p>
+          <div className="flex items-center gap-3">
+            <img src={logo} alt="FV Freitas Vidal" className="h-10 w-auto" />
+            <div>
+              <h1 className="text-lg font-semibold">Gestor de Rota</h1>
+              <p className="text-xs text-muted-foreground">Freitas Vidal Serviços LTDA</p>
+            </div>
           </div>
           <Button onClick={() => setModalOpen(true)} size="sm" className="gap-1.5">
             <Plus className="h-3.5 w-3.5" />
@@ -113,7 +128,7 @@ const Index = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Todos">Todos</SelectItem>
-              {VEHICLES.map((v) => (
+              {vehicles.map((v) => (
                 <SelectItem key={v} value={v}>{getVehicleName(v)}</SelectItem>
               ))}
             </SelectContent>
@@ -135,6 +150,13 @@ const Index = () => {
             type={margin >= 0 ? "profit" : "loss"}
           />
         </div>
+
+        {/* Pending Reminders Banner */}
+        {pendingExpenses.length > 0 && (
+          <div className="rounded-xl border-2 border-warning/40 bg-warning/10 p-4">
+            <PaymentReminders expenses={filtered} onMarkPaid={handleMarkPaid} />
+          </div>
+        )}
 
         {/* Tabs */}
         <Tabs defaultValue="lancamentos" className="w-full">
@@ -173,7 +195,10 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="graficos">
-            <RevenueChart year={year} />
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <RevenueChart year={year} />
+              <CostPieChart expenses={filtered} />
+            </div>
           </TabsContent>
 
           <TabsContent value="comparativo">

@@ -56,4 +56,26 @@ export const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
 export const SORTED_CATEGORIES = (Object.entries(CATEGORY_LABELS) as [ExpenseCategory, string][])
   .sort(([, a], [, b]) => a.localeCompare(b, "pt-BR"));
 
-export const VEHICLES = ["Van 01", "Van 02", "Van 03", "Geral"];
+const VEHICLES_KEY = "route-vehicles-list";
+
+export function getVehicles(): string[] {
+  const raw = localStorage.getItem(VEHICLES_KEY);
+  if (raw) return JSON.parse(raw);
+  return ["Van 01", "Van 02", "Van 03", "Geral"];
+}
+
+export function addVehicle(name: string): void {
+  const vehicles = getVehicles();
+  if (!vehicles.includes(name)) {
+    vehicles.push(name);
+    localStorage.setItem(VEHICLES_KEY, JSON.stringify(vehicles));
+  }
+}
+
+export function removeVehicle(name: string): void {
+  const vehicles = getVehicles().filter((v) => v !== name);
+  localStorage.setItem(VEHICLES_KEY, JSON.stringify(vehicles));
+}
+
+// Keep VEHICLES as a getter for backward compat
+export const VEHICLES = getVehicles();
