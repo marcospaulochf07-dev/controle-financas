@@ -60,18 +60,24 @@ const Index = () => {
     return getVehicles();
   }, [refreshKey]);
 
-  const filtered = useMemo(() => {
+  // All expenses for this month (used for payment reminders, metrics)
+  const allMonthExpenses = useMemo(() => {
     return allExpenses.filter((e) => {
       const d = new Date(e.date);
-      const matchMonth = d.getFullYear() === year && d.getMonth() === month;
-      const matchVehicle = vehicleFilter === "Todos" || e.vehicle === vehicleFilter;
-      // Exclude driver dailies and auto-recurring from lançamentos (shown in their own sections)
-      const isDriverDaily = e.source === "diaria-auto" || (e.category === "diaria" && e.source === "whatsapp");
-      return matchMonth && matchVehicle && !isDriverDaily;
+      return d.getFullYear() === year && d.getMonth() === month;
     });
-  }, [allExpenses, year, month, vehicleFilter]);
+  }, [allExpenses, year, month]);
 
-  const totalCost = filtered.reduce((s, e) => s + e.amount, 0);
+  // Filtered for lançamentos table (excludes diarias, applies vehicle filter)
+  const filtered = useMemo(() => {
+    return allMonthExpenses.filter((e) => {
+      const matchVehicle = vehicleFilter === "Todos" || e.vehicle === vehicleFilter;
+      const isDriverDaily = e.source === "diaria-auto" || (e.category === "diaria" && e.source === "whatsapp");
+      return matchVehicle && !isDriverDaily;
+    });
+  }, [allMonthExpenses, vehicleFilter]);
+
+  const totalCost = allMonthExpenses.reduce((s, e) => s + e.amount, 0);
   const revenue = getMonthlyRevenue(monthKey);
   const margin = revenue - totalCost;
 
