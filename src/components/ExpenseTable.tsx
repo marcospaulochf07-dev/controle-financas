@@ -1,4 +1,5 @@
 import { Expense, CATEGORY_LABELS } from "@/lib/types";
+import { getVehicleName } from "@/lib/store";
 import { Trash2 } from "lucide-react";
 
 interface ExpenseTableProps {
