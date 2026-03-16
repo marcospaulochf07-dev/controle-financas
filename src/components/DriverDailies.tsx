@@ -116,7 +116,7 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
     if (!drivers.includes(driverName.trim())) {
       addDriver(driverName.trim());
     }
-    saveDriverDaily({
+    await saveDriverDailyAsync({
       date,
       driverName: driverName.trim(),
       routes: numRoutes,
