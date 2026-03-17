@@ -127,17 +127,17 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
   useEffect(() => {
     if (reminders.length === 0 || syncingRef.current) return;
 
-    const currentMonth = getMonthKey();
-    const lastSync = localStorage.getItem("recurring-sync-month");
-    if (lastSync === currentMonth) return;
+    const currentYear = String(new Date().getFullYear());
+    const lastSync = localStorage.getItem("recurring-sync-year");
+    if (lastSync === currentYear) return;
 
     syncingRef.current = true;
     syncRecurringToExpenses(reminders).then((created) => {
-      localStorage.setItem("recurring-sync-month", currentMonth);
+      localStorage.setItem("recurring-sync-year", currentYear);
       syncingRef.current = false;
       if (created) {
         onUpdated();
-        toast.success("Custos fixos lançados como pagamentos pendentes do mês.");
+        toast.success("Custos fixos lançados para todos os meses do ano.");
       }
     }).catch(() => { syncingRef.current = false; });
   }, [reminders]); // eslint-disable-line react-hooks/exhaustive-deps
