@@ -114,7 +114,11 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
   }, []);
 
   // Sync localStorage paid status from Supabase expense status
+  const syncPaidRef = useRef(false);
   useEffect(() => {
+    if (syncPaidRef.current) return;
+    syncPaidRef.current = true;
+
     async function syncPaidStatus() {
       const now = new Date();
       const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -147,11 +151,12 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
         }
       }
 
+      syncPaidRef.current = false;
       if (changed) setRefreshKey((k) => k + 1);
     }
 
     syncPaidStatus();
-  }, [refreshKey]); // re-run when data refreshes
+  }); // runs on every render but guarded by ref
 
   const reminders = useMemo(() => {
     void refreshKey;
