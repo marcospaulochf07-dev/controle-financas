@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Plus, ChevronLeft, ChevronRight, BarChart3, FileText, Users, GitCompare, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -301,65 +301,63 @@ const Index = () => {
             </div>
           </motion.div>
 
-          <AnimatePresence mode="wait">
-            {activeTab === "lancamentos" && (
-              <motion.div key="lancamentos" variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-                  <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card lg:col-span-3">
-                    <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                      Lançamentos — {MONTHS[month]} {year}
-                    </h2>
-                    <ExpenseTable expenses={filtered} onDelete={handleDelete} />
-                  </div>
-                  <div className="space-y-6">
-                    <CostBreakdown expenses={filtered} />
-                    <VehicleManager onUpdated={refresh} />
-                  </div>
+          {activeTab === "lancamentos" && (
+            <motion.div key="lancamentos" variants={tabAnimVariants} initial="hidden" animate="visible">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+                <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card lg:col-span-3">
+                  <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                    Lançamentos — {MONTHS[month]} {year}
+                  </h2>
+                  <ExpenseTable expenses={filtered} onDelete={handleDelete} />
                 </div>
-
-                <div
-                  className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5"
-                  role="region"
-                  aria-label="Lembretes de pagamento"
-                  aria-live="polite"
-                >
-                  <div className="lg:col-span-3">
-                    <PaymentReminders expenses={allMonthExpenses} onMarkPaid={handleMarkPaid} isFutureMonth={isFutureMonth} />
-                  </div>
-                  <div className="lg:col-span-2">
-                    <RecurringReminders onUpdated={refresh} driverDailiesTotal={driverDailiesTotal} selectedYear={year} selectedMonth={month} />
-                  </div>
+                <div className="space-y-6">
+                  <CostBreakdown expenses={filtered} />
+                  <VehicleManager onUpdated={refresh} />
                 </div>
-              </motion.div>
-            )}
+              </div>
 
-            {activeTab === "diarias" && (
-              <motion.div key="diarias" variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
-                <DriverDailies year={year} month={month} expenses={allExpenses} onUpdated={refresh} />
-              </motion.div>
-            )}
-
-            {activeTab === "pagos" && (
-              <motion.div key="pagos" variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
-                <PaidExpenses expenses={allMonthExpenses} onMarkPending={handleMarkPending} />
-              </motion.div>
-            )}
-
-            {activeTab === "graficos" && (
-              <motion.div key="graficos" variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                  <RevenueChart allExpenses={allExpenses} year={year} />
-                  <CostPieChart expenses={filtered} />
+              <div
+                className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5"
+                role="region"
+                aria-label="Lembretes de pagamento"
+                aria-live="polite"
+              >
+                <div className="lg:col-span-3">
+                  <PaymentReminders expenses={allMonthExpenses} onMarkPaid={handleMarkPaid} isFutureMonth={isFutureMonth} />
                 </div>
-              </motion.div>
-            )}
+                <div className="lg:col-span-2">
+                  <RecurringReminders onUpdated={refresh} driverDailiesTotal={driverDailiesTotal} selectedYear={year} selectedMonth={month} />
+                </div>
+              </div>
+            </motion.div>
+          )}
 
-            {activeTab === "comparativo" && (
-              <motion.div key="comparativo" variants={tabAnimVariants} initial="hidden" animate="visible" exit="exit">
-                <MonthComparison allExpenses={allExpenses} year={year} month={month} />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {activeTab === "diarias" && (
+            <motion.div key="diarias" variants={tabAnimVariants} initial="hidden" animate="visible">
+              <DriverDailies year={year} month={month} expenses={allExpenses} onUpdated={refresh} />
+            </motion.div>
+          )}
+
+          {activeTab === "pagos" && (
+            <motion.div key="pagos" variants={tabAnimVariants} initial="hidden" animate="visible">
+              <PaidExpenses expenses={allMonthExpenses} onMarkPending={handleMarkPending} />
+            </motion.div>
+          )}
+
+          {activeTab === "graficos" && (
+            <motion.div key="graficos" variants={tabAnimVariants} initial="hidden" animate="visible">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <RevenueChart allExpenses={allExpenses} year={year} />
+                <CostPieChart expenses={filtered} />
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === "comparativo" && (
+            <motion.div key="comparativo" variants={tabAnimVariants} initial="hidden" animate="visible">
+              <MonthComparison allExpenses={allExpenses} year={year} month={month} />
+            </motion.div>
+          )}
         </div>
       </main>
 
