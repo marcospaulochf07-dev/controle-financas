@@ -97,26 +97,28 @@ Responda SOMENTE com o JSON, exemplo: {"action":"register_expense","date":"2026-
     );
 
     if (!aiResponse.ok) {
+      const errText = await aiResponse.text();
+      console.error("Gemini API error:", aiResponse.status, errText);
       if (aiResponse.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded, tente novamente em instantes." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos de IA esgotados." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errText = await aiResponse.text();
-      console.error("AI error:", aiResponse.status, errText);
-      throw new Error(`AI gateway error: ${aiResponse.status}`);
+      throw new Error(`Gemini API error: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("AI did not return structured data");
+    const textContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textContent) throw new Error("Gemini did not return content");
+
+    let parsed;
+    try {
+      parsed = JSON.parse(textContent);
+    } catch (parseErr) {
+      console.error("Failed to parse Gemini response:", textContent);
+      throw new Error("Failed to parse AI response as JSON");
+    }
 
     const parsed = JSON.parse(toolCall.function.arguments);
 
