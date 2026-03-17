@@ -54,43 +54,46 @@ function checkMonthlyReset() {
   }
 }
 
-// Sync recurring reminders as pending expenses in the DB for current month (queries DB directly to avoid stale state)
+// Sync recurring reminders as pending expenses in the DB for all months of the current year
 async function syncRecurringToExpenses(reminders: RecurringReminder[]): Promise<boolean> {
   const now = new Date();
   const year = now.getFullYear();
-  const month = now.getMonth();
-  const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
-  const startDate = `${monthStr}-01`;
-  const endDate = month === 11 ? `${year + 1}-01-01` : `${year}-${String(month + 2).padStart(2, "0")}-01`;
   let created = false;
 
-  for (const r of reminders) {
-    if (r.amount <= 0) continue;
-    if (r.category === "diaria") continue;
+  for (let month = 0; month < 12; month++) {
+    const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const startDate = `${monthStr}-01`;
+    const endDate = month === 11 ? `${year + 1}-01-01` : `${year}-${String(month + 2).padStart(2, "0")}-01`;
 
-    // Query DB directly for existence check (avoids stale state)
-    const { data } = await supabase
-      .from("expenses")
-      .select("id")
-      .eq("source", "recorrente-auto")
-      .eq("description", r.label)
-      .gte("date", startDate)
-      .lt("date", endDate)
-      .limit(1);
+    for (const r of reminders) {
+      if (r.amount <= 0) continue;
+      if (r.category === "diaria") continue;
 
-    if (data && data.length > 0) continue;
+      const { data } = await supabase
+        .from("expenses")
+        .select("id")
+        .eq("source", "recorrente-auto")
+        .eq("description", r.label)
+        .gte("date", startDate)
+        .lt("date", endDate)
+        .limit(1);
 
-    const day = Math.min(r.dayOfMonth, 28);
-    await saveExpense({
-      date: `${monthStr}-${String(day).padStart(2, "0")}`,
-      category: r.category,
-      description: r.label,
-      vehicle: "Geral",
-      amount: r.amount,
-      status: r.paid ? "pago" : "pendente",
-      source: "recorrente-auto",
-    });
-    created = true;
+      if (data && data.length > 0) continue;
+
+      const day = Math.min(r.dayOfMonth, 28);
+      // Current month and past months: respect paid status; future months: pendente
+      const isPastOrCurrent = month <= now.getMonth();
+      await saveExpense({
+        date: `${monthStr}-${String(day).padStart(2, "0")}`,
+        category: r.category,
+        description: r.label,
+        vehicle: "Geral",
+        amount: r.amount,
+        status: isPastOrCurrent && r.paid ? "pago" : "pendente",
+        source: "recorrente-auto",
+      });
+      created = true;
+    }
   }
   return created;
 }
