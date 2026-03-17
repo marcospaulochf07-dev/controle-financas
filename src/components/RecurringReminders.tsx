@@ -87,7 +87,7 @@ async function syncRecurringToExpenses(reminders: RecurringReminder[]): Promise<
       description: r.label,
       vehicle: "Geral",
       amount: r.amount,
-      status: "pendente",
+      status: r.paid ? "pago" : "pendente",
       source: "recorrente-auto",
     });
     created = true;
