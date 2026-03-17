@@ -81,13 +81,18 @@ const Index = () => {
     return getVehicles();
   }, [refreshKey]);
 
-  // All expenses for this month (used for payment reminders, metrics)
+  // All expenses for this month (diárias sempre consolidadas pela soma real dos registros)
   const allMonthExpenses = useMemo(() => {
-    return allExpenses.filter((e) => {
+    const monthExpenses = allExpenses.filter((e) => {
       const d = new Date(e.date);
       return d.getFullYear() === year && d.getMonth() === month;
     });
-  }, [allExpenses, year, month]);
+
+    const nonDriverDailyExpenses = monthExpenses.filter((expense) => !isDriverDailyExpense(expense));
+    const consolidatedDriverExpenses = buildConsolidatedDriverExpenses(allExpenses, allDriverDailies, year, month);
+
+    return [...nonDriverDailyExpenses, ...consolidatedDriverExpenses];
+  }, [allExpenses, allDriverDailies, year, month]);
 
   // Filtered for lançamentos table (excludes diarias, applies vehicle filter)
   const filtered = useMemo(() => {
