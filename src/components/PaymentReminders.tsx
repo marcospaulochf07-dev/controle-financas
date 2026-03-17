@@ -5,9 +5,9 @@ import { Expense, CATEGORY_LABELS } from "@/lib/types";
 import { getVehicleName } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 
-interface Props { expenses: Expense[]; onMarkPaid: (id: string) => void; }
+interface Props { expenses: Expense[]; onMarkPaid: (id: string) => void; isFutureMonth?: boolean; }
 
-export function PaymentReminders({ expenses, onMarkPaid }: Props) {
+export function PaymentReminders({ expenses, onMarkPaid, isFutureMonth = false }: Props) {
   const pending = useMemo(
     () => expenses.filter((e) => e.status === "pendente").sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [expenses]
@@ -28,7 +28,7 @@ export function PaymentReminders({ expenses, onMarkPaid }: Props) {
   const totalPending = pending.reduce((s, e) => s + e.amount, 0);
 
   return (
-    <div className="rounded-2xl border border-border/50 bg-card p-6 shadow-card" role="region" aria-label="Pagamentos pendentes">
+    <div className={`rounded-2xl border border-border/50 bg-card p-6 shadow-card ${isFutureMonth ? "opacity-50" : ""}`} role="region" aria-label="Pagamentos pendentes">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Pagamentos Pendentes</h3>
         <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2.5 py-0.5 text-xs font-bold text-warning ring-1 ring-warning/20" role="status" aria-live="polite">
@@ -55,15 +55,17 @@ export function PaymentReminders({ expenses, onMarkPaid }: Props) {
               <span className="text-sm font-bold tabular-nums text-warning whitespace-nowrap">
                 {e.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
               </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 w-8 p-0 text-profit hover:bg-profit/10 hover:text-profit rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                onClick={() => onMarkPaid(e.id)}
-                aria-label={`Marcar ${CATEGORY_LABELS[e.category]} como pago`}
-              >
-                <CheckCircle2 className="h-4.5 w-4.5" />
-              </Button>
+              {!isFutureMonth && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0 text-profit hover:bg-profit/10 hover:text-profit rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                  onClick={() => onMarkPaid(e.id)}
+                  aria-label={`Marcar ${CATEGORY_LABELS[e.category]} como pago`}
+                >
+                  <CheckCircle2 className="h-4.5 w-4.5" />
+                </Button>
+              )}
             </div>
           </motion.div>
         ))}

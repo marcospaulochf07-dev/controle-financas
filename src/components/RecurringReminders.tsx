@@ -19,6 +19,8 @@ const DEFAULT_RECURRING: Omit<RecurringReminder, "id">[] = [
 interface Props {
   onUpdated: () => void;
   driverDailiesTotal?: number;
+  selectedYear?: number;
+  selectedMonth?: number;
 }
 
 function getMonthKey() {
@@ -98,7 +100,7 @@ async function syncRecurringToExpenses(reminders: RecurringReminder[]): Promise<
   return created;
 }
 
-export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props) {
+export function RecurringReminders({ onUpdated, driverDailiesTotal = 0, selectedYear, selectedMonth }: Props) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState("");
@@ -263,6 +265,11 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
   const today = new Date().getDate();
   const totalMonthly = reminders.reduce((s, r) => s + r.amount, 0);
 
+  const now2 = new Date();
+  const isFutureMonth = selectedYear !== undefined && selectedMonth !== undefined
+    ? (selectedYear > now2.getFullYear() || (selectedYear === now2.getFullYear() && selectedMonth > now2.getMonth()))
+    : false;
+
   const pendingReminders = reminders.filter((r) => !r.paid);
   const paidReminders = reminders.filter((r) => r.paid);
 
@@ -338,20 +345,22 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
           {pendingReminders.length > 0 && (
             <div className="space-y-2">
               {pendingReminders.map((r) => {
-                const isNear = Math.abs(r.dayOfMonth - today) <= 3 || (today > 25 && r.dayOfMonth <= 3);
+                const isNear = !isFutureMonth && (Math.abs(r.dayOfMonth - today) <= 3 || (today > 25 && r.dayOfMonth <= 3));
                 return (
                   <div
                     key={r.id}
                     className={`flex items-center justify-between rounded-xl px-4 py-3 border ${
-                      isNear
+                      isFutureMonth
+                        ? "border-border/30 bg-muted/10 opacity-50"
+                        : isNear
                         ? "border-warning/30 bg-warning/5"
                         : "border-border/50 bg-muted/20"
                     }`}
                   >
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Bell className={`h-3.5 w-3.5 shrink-0 ${isNear ? "text-warning" : "text-muted-foreground"}`} />
+                      <Bell className={`h-3.5 w-3.5 shrink-0 ${isFutureMonth ? "text-muted-foreground/50" : isNear ? "text-warning" : "text-muted-foreground"}`} />
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{r.label}</p>
+                        <p className={`text-sm font-medium truncate ${isFutureMonth ? "text-muted-foreground" : ""}`}>{r.label}</p>
                         <p className="text-xs text-muted-foreground">
                           {CATEGORY_LABELS[r.category]} · Dia {r.dayOfMonth} ·{" "}
                           <span className="font-semibold">{r.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
@@ -359,15 +368,17 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
                       </div>
                     </div>
                     <div className="flex items-center gap-1 ml-2">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-profit hover:bg-profit/10 hover:text-profit"
-                        onClick={() => handleTogglePaid(r.id)}
-                        title="Marcar como pago"
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                      </Button>
+                      {!isFutureMonth && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-profit hover:bg-profit/10 hover:text-profit"
+                          onClick={() => handleTogglePaid(r.id)}
+                          title="Marcar como pago"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </Button>
+                      )}
                       <button
                         onClick={() => handleDelete(r.id)}
                         className="rounded p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-loss"

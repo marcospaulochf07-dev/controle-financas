@@ -72,6 +72,8 @@ const Index = () => {
   }, [refreshExpenses, refreshDailies]);
 
   const monthKey = getMonthKey(year, month);
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
+  const isFutureMonth = year > now.getFullYear() || (year === now.getFullYear() && month > now.getMonth());
 
   const vehicles = useMemo(() => {
     void refreshKey;
@@ -289,10 +291,10 @@ const Index = () => {
                   aria-live="polite"
                 >
                   <div className="lg:col-span-3">
-                    <PaymentReminders expenses={allMonthExpenses} onMarkPaid={handleMarkPaid} />
+                    <PaymentReminders expenses={allMonthExpenses} onMarkPaid={handleMarkPaid} isFutureMonth={isFutureMonth} />
                   </div>
                   <div className="lg:col-span-2">
-                    <RecurringReminders onUpdated={refresh} driverDailiesTotal={driverDailiesTotal} />
+                    <RecurringReminders onUpdated={refresh} driverDailiesTotal={driverDailiesTotal} selectedYear={year} selectedMonth={month} />
                   </div>
                 </div>
               </motion.div>

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Plus, Trash2, Route, Users, UserPlus, CheckCircle2, Clock, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,6 +70,31 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
         d.getFullYear() === year && d.getMonth() === month;
     });
   }, [expenses, year, month]);
+
+  // Auto-sync driver expense amounts when dailies change (fixes whatsapp-added dailies)
+  useEffect(() => {
+    if (byDriver.length === 0) return;
+    let needsSync = false;
+    for (const [name, data] of byDriver) {
+      const exp = driverExpenses.find((e) => e.description.includes(name));
+      if (exp && exp.amount !== data.value) {
+        needsSync = true;
+        break;
+      }
+      if (!exp && data.value > 0) {
+        needsSync = true;
+        break;
+      }
+    }
+    if (needsSync) {
+      (async () => {
+        for (const [name, data] of byDriver) {
+          await syncDriverExpense(name, data.value);
+        }
+        refresh();
+      })();
+    }
+  }, [byDriver, driverExpenses]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getDriverExpense = (name: string) => {
     return driverExpenses.find((e) => e.description.includes(name));

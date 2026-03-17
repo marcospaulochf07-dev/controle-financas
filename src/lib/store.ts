@@ -79,7 +79,7 @@ export async function updateExpenseStatus(id: string, status: "pago" | "pendente
 // === Revenue (localStorage - keep for now) ===
 export function getMonthlyRevenue(month: string): number {
   const revenues = JSON.parse(localStorage.getItem(REVENUE_KEY) || "{}");
-  return revenues[month] || 0;
+  return revenues[month] ?? 20000;
 }
 
 export function setMonthlyRevenue(month: string, value: number): void {
