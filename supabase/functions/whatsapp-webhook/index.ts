@@ -80,10 +80,11 @@ Se não parecer nenhuma dessas ações, use action "invalid".
 Responda SOMENTE com o JSON, exemplo: {"action":"register_expense","date":"2026-03-17","category":"manutencao","description":"Troca de pneus","vehicle":"Van 01","amount":450,"status":"pago"}`;
 
     const aiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(12000),
         body: JSON.stringify({
           contents: [
             { role: "user", parts: [{ text: `${systemPrompt}\n\nMensagem do usuário: "${messageBody}"` }] },
