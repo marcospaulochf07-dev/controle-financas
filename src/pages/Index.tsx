@@ -25,8 +25,18 @@ import { toast } from "sonner";
 import logo from "@/assets/logo.png";
 
 const MONTHS = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
 ];
 
 function getMonthKey(year: number, month: number) {
@@ -35,7 +45,11 @@ function getMonthKey(year: number, month: number) {
 
 const tabAnimVariants = {
   hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
+  },
   exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
 
@@ -85,12 +99,16 @@ const Index = () => {
   const margin = revenue - totalCost;
 
   const prevMonth = () => {
-    if (month === 0) { setMonth(11); setYear(year - 1); }
-    else setMonth(month - 1);
+    if (month === 0) {
+      setMonth(11);
+      setYear(year - 1);
+    } else setMonth(month - 1);
   };
   const nextMonth = () => {
-    if (month === 11) { setMonth(0); setYear(year + 1); }
-    else setMonth(month + 1);
+    if (month === 11) {
+      setMonth(0);
+      setYear(year + 1);
+    } else setMonth(month + 1);
   };
 
   const handleDelete = async (id: string) => {
@@ -112,7 +130,10 @@ const Index = () => {
 
   const driverDailiesTotal = useMemo(() => {
     return allDriverDailies
-      .filter((d) => { const dt = new Date(d.date); return dt.getFullYear() === year && dt.getMonth() === month; })
+      .filter((d) => {
+        const dt = new Date(d.date);
+        return dt.getFullYear() === year && dt.getMonth() === month;
+      })
       .reduce((s, d) => s + d.routes * d.valuePerRoute, 0);
   }, [allDriverDailies, year, month]);
 
@@ -128,18 +149,14 @@ const Index = () => {
             className="flex items-center gap-3"
           >
             <div className="rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 p-1.5">
-              <img src={logo} alt="FV Freitas Vidal" className="h-9 w-auto" />
+              <img src={logo} alt="FV Freitas Vidal" className="h-12 w-auto" />
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight">Gestor de Frota</h1>
               <p className="text-[11px] font-medium text-muted-foreground tracking-wide">FREITAS VIDAL SERVIÇOS LTDA</p>
             </div>
           </motion.div>
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-          >
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
             <Button
               onClick={() => setModalOpen(true)}
               size="sm"
@@ -184,13 +201,18 @@ const Index = () => {
             </button>
           </div>
           <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
-            <SelectTrigger className="h-9 w-40 rounded-xl border-border/50 text-xs font-medium shadow-card" aria-label="Filtrar por veículo">
+            <SelectTrigger
+              className="h-9 w-40 rounded-xl border-border/50 text-xs font-medium shadow-card"
+              aria-label="Filtrar por veículo"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Todos">Todos os veículos</SelectItem>
               {vehicles.map((v) => (
-                <SelectItem key={v} value={v}>{getVehicleName(v)}</SelectItem>
+                <SelectItem key={v} value={v}>
+                  {getVehicleName(v)}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -210,12 +232,7 @@ const Index = () => {
             </motion.div>
           </div>
           <MetricCard label="Custo Operacional Total" value={totalCost} delay={0.2} />
-          <MetricCard
-            label="Margem Líquida"
-            value={margin}
-            type={margin >= 0 ? "profit" : "loss"}
-            delay={0.3}
-          />
+          <MetricCard label="Margem Líquida" value={margin} type={margin >= 0 ? "profit" : "loss"} delay={0.3} />
         </div>
 
         {/* Tabs */}
@@ -225,7 +242,10 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.3 }}
           >
-            <TabsList className="w-full justify-start flex-wrap h-auto gap-1.5 bg-transparent p-0 mb-4" aria-label="Seções do painel">
+            <TabsList
+              className="w-full justify-start flex-wrap h-auto gap-1.5 bg-transparent p-0 mb-4"
+              aria-label="Seções do painel"
+            >
               {[
                 { value: "lancamentos", label: "Lançamentos", icon: FileText },
                 { value: "diarias", label: "Diárias", icon: Users },
@@ -262,7 +282,12 @@ const Index = () => {
                 </div>
 
                 {/* Lembretes abaixo dos lançamentos */}
-                <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5" role="region" aria-label="Lembretes de pagamento" aria-live="polite">
+                <div
+                  className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5"
+                  role="region"
+                  aria-label="Lembretes de pagamento"
+                  aria-live="polite"
+                >
                   <div className="lg:col-span-3">
                     <PaymentReminders expenses={allMonthExpenses} onMarkPaid={handleMarkPaid} />
                   </div>
@@ -303,11 +328,7 @@ const Index = () => {
         </Tabs>
       </main>
 
-      <NewExpenseModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSaved={refresh}
-      />
+      <NewExpenseModal open={modalOpen} onClose={() => setModalOpen(false)} onSaved={refresh} />
     </div>
   );
 };
