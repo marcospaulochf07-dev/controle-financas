@@ -23,6 +23,7 @@ import { useExpenses } from "@/hooks/use-expenses";
 import { getVehicles } from "@/lib/types";
 import { toast } from "sonner";
 import logo from "@/assets/logo.png";
+import { buildConsolidatedDriverExpenses, isDriverDailyExpense, syncDriverDailyExpenses } from "@/lib/driver-daily-expenses";
 
 const MONTHS = [
   "Janeiro",
