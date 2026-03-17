@@ -79,34 +79,68 @@ Se não parecer nenhuma dessas ações, use action "invalid".
 
 Responda SOMENTE com o JSON, exemplo: {"action":"register_expense","date":"2026-03-17","category":"manutencao","description":"Troca de pneus","vehicle":"Van 01","amount":450,"status":"pago"}`;
 
-    const aiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(12000),
-        body: JSON.stringify({
-          contents: [
-            { role: "user", parts: [{ text: `${systemPrompt}\n\nMensagem do usuário: "${messageBody}"` }] },
-          ],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.1,
-          },
-        }),
-      }
-    );
+    const geminiRequestBody = JSON.stringify({
+      contents: [
+        { role: "user", parts: [{ text: `${systemPrompt}\n\nMensagem do usuário: "${messageBody}"` }] },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1,
+      },
+    });
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("Gemini API error:", aiResponse.status, errText);
-      if (aiResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded, tente novamente em instantes." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+    const models = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+    let aiResponse: Response | null = null;
+    let lastError = "";
+
+    for (const model of models) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const resp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: AbortSignal.timeout(12000),
+              body: geminiRequestBody,
+            }
+          );
+
+          if (resp.ok) {
+            aiResponse = resp;
+            break;
+          }
+
+          const errText = await resp.text();
+          lastError = `${model} (${resp.status}): ${errText}`;
+          console.error("Gemini API error:", lastError);
+
+          if (resp.status === 429) {
+            return new Response(
+              JSON.stringify({ error: "Rate limit exceeded, tente novamente em instantes." }),
+              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          // For 503 (overloaded), wait briefly and retry
+          if (resp.status === 503 && attempt === 0) {
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+
+          // For other errors, try next model
+          break;
+        } catch (fetchErr) {
+          lastError = `${model}: ${fetchErr}`;
+          console.error("Fetch error:", lastError);
+          break;
+        }
       }
-      throw new Error(`Gemini API error: ${aiResponse.status}`);
+      if (aiResponse) break;
+    }
+
+    if (!aiResponse) {
+      throw new Error(`All Gemini models failed. Last error: ${lastError}`);
     }
 
     const aiData = await aiResponse.json();
