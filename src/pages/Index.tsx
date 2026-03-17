@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, ChevronLeft, ChevronRight, BarChart3, FileText, Users, GitCompare, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { useExpenses } from "@/hooks/use-expenses";
 import { getVehicles } from "@/lib/types";
 import { toast } from "sonner";
 import logo from "@/assets/logo.png";
+import { buildConsolidatedDriverExpenses, isDriverDailyExpense, syncDriverDailyExpenses } from "@/lib/driver-daily-expenses";
 
 const MONTHS = [
   "Janeiro",
@@ -80,13 +81,18 @@ const Index = () => {
     return getVehicles();
   }, [refreshKey]);
 
-  // All expenses for this month (used for payment reminders, metrics)
+  // All expenses for this month (diárias sempre consolidadas pela soma real dos registros)
   const allMonthExpenses = useMemo(() => {
-    return allExpenses.filter((e) => {
+    const monthExpenses = allExpenses.filter((e) => {
       const d = new Date(e.date);
       return d.getFullYear() === year && d.getMonth() === month;
     });
-  }, [allExpenses, year, month]);
+
+    const nonDriverDailyExpenses = monthExpenses.filter((expense) => !isDriverDailyExpense(expense));
+    const consolidatedDriverExpenses = buildConsolidatedDriverExpenses(allExpenses, allDriverDailies, year, month);
+
+    return [...nonDriverDailyExpenses, ...consolidatedDriverExpenses];
+  }, [allExpenses, allDriverDailies, year, month]);
 
   // Filtered for lançamentos table (excludes diarias, applies vehicle filter)
   const filtered = useMemo(() => {
@@ -99,6 +105,23 @@ const Index = () => {
   const totalCost = allMonthExpenses.reduce((s, e) => s + e.amount, 0);
   const revenue = getMonthlyRevenue(monthKey);
   const margin = revenue - totalCost;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncDailies = async () => {
+      const changed = await syncDriverDailyExpenses(allExpenses, allDriverDailies, year, month);
+      if (changed && !cancelled) {
+        refreshExpenses();
+      }
+    };
+
+    void syncDailies();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [allExpenses, allDriverDailies, year, month, refreshExpenses]);
 
   const prevMonth = () => {
     if (month === 0) {

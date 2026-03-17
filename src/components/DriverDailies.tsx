@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getVehicles, Expense } from "@/lib/types";
-import { saveDriverDailyAsync, deleteDriverDailyAsync, getVehicleName, getDrivers, addDriver, removeDriver, saveExpense, updateExpenseStatus, deleteExpense } from "@/lib/store";
+import { saveDriverDailyAsync, deleteDriverDailyAsync, getVehicleName, getDrivers, addDriver, removeDriver, updateExpenseStatus } from "@/lib/store";
+import { buildConsolidatedDriverExpenses, getDriverDailyDescription, syncDriverDailyExpenses } from "@/lib/driver-daily-expenses";
 import { useDriverDailies } from "@/hooks/use-driver-dailies";
 import { toast } from "sonner";
 
@@ -61,75 +62,20 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
   }, [filtered]);
 
-  // Find existing driver salary expenses for this month
   const driverExpenses = useMemo(() => {
-    return expenses.filter((e) => {
-      const d = new Date(e.date);
-      return e.category === "diaria" &&
-        (e.source === "diaria-auto" || e.source === "whatsapp") &&
-        d.getFullYear() === year && d.getMonth() === month;
-    });
-  }, [expenses, year, month]);
+    return buildConsolidatedDriverExpenses(expenses, allDailies, year, month);
+  }, [expenses, allDailies, year, month]);
 
-  // Auto-sync driver expense amounts when dailies change (fixes whatsapp-added dailies)
   useEffect(() => {
-    if (byDriver.length === 0) return;
-    let needsSync = false;
-    for (const [name, data] of byDriver) {
-      const exp = driverExpenses.find((e) => e.description.includes(name));
-      if (exp && exp.amount !== data.value) {
-        needsSync = true;
-        break;
+    void syncDriverDailyExpenses(expenses, allDailies, year, month).then((changed) => {
+      if (changed) {
+        onUpdated();
       }
-      if (!exp && data.value > 0) {
-        needsSync = true;
-        break;
-      }
-    }
-    if (needsSync) {
-      (async () => {
-        for (const [name, data] of byDriver) {
-          await syncDriverExpense(name, data.value);
-        }
-        refresh();
-      })();
-    }
-  }, [byDriver, driverExpenses]); // eslint-disable-line react-hooks/exhaustive-deps
+    });
+  }, [expenses, allDailies, year, month, onUpdated]);
 
   const getDriverExpense = (name: string) => {
-    return driverExpenses.find((e) => e.description.includes(name));
-  };
-
-  const syncDriverExpense = async (name: string, totalAmount: number) => {
-    const existing = getDriverExpense(name);
-    const monthLabel = `${String(month + 1).padStart(2, "0")}/${year}`;
-
-    if (existing) {
-      if (existing.amount !== totalAmount) {
-        await deleteExpense(existing.id);
-        if (totalAmount > 0) {
-          await saveExpense({
-            date: `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
-            category: "diaria",
-            description: `Diárias ${name} - ${monthLabel}`,
-            vehicle: "Geral",
-            amount: totalAmount,
-            status: "pendente",
-            source: "diaria-auto",
-          });
-        }
-      }
-    } else if (totalAmount > 0) {
-      await saveExpense({
-        date: `${year}-${String(month + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
-        category: "diaria",
-        description: `Diárias ${name} - ${monthLabel}`,
-        vehicle: "Geral",
-        amount: totalAmount,
-        status: "pendente",
-        source: "diaria-auto",
-      });
-    }
+    return driverExpenses.find((e) => e.description === getDriverDailyDescription(name, year, month));
   };
 
   const handleAdd = async () => {
@@ -149,13 +95,6 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
       vehicle,
     });
 
-    const currentTotal = filtered
-      .filter((d) => d.driverName === driverName.trim())
-      .reduce((s, d) => s + d.routes * d.valuePerRoute, 0);
-    const newTotal = currentTotal + numRoutes * VALUE_PER_ROUTE;
-
-    await syncDriverExpense(driverName.trim(), newTotal);
-
     toast.success(`+${numRoutes} rota${numRoutes > 1 ? "s" : ""} para ${driverName.trim()} = R$ ${(numRoutes * VALUE_PER_ROUTE).toFixed(2)}`);
     setDriverName("");
     setRoutes("2");
@@ -168,15 +107,9 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
     await deleteDriverDailyAsync(id);
 
     if (daily) {
-      const remainingTotal = filtered
-        .filter((d) => d.driverName === daily.driverName && d.id !== id)
-        .reduce((s, d) => s + d.routes * d.valuePerRoute, 0);
-
-      if (remainingTotal === 0) {
-        const exp = getDriverExpense(daily.driverName);
-        if (exp) await deleteExpense(exp.id);
-      } else {
-        await syncDriverExpense(daily.driverName, remainingTotal);
+      const remainingDriverHasDailies = filtered.some((d) => d.driverName === daily.driverName && d.id !== id);
+      if (!remainingDriverHasDailies) {
+        toast("Última diária do motorista removida.");
       }
     }
 
