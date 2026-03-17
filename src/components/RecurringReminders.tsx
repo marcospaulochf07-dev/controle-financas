@@ -113,11 +113,11 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
     setRefreshKey((k) => k + 1);
   }, []);
 
-  // Sync localStorage paid status from Supabase expense status
-  const syncPaidRef = useRef(false);
+  // Sync localStorage paid status from Supabase expense status (once on mount)
+  const hasSyncedPaid = useRef(false);
   useEffect(() => {
-    if (syncPaidRef.current) return;
-    syncPaidRef.current = true;
+    if (hasSyncedPaid.current) return;
+    hasSyncedPaid.current = true;
 
     async function syncPaidStatus() {
       const now = new Date();
@@ -151,12 +151,11 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
         }
       }
 
-      syncPaidRef.current = false;
       if (changed) setRefreshKey((k) => k + 1);
     }
 
     syncPaidStatus();
-  }); // runs on every render but guarded by ref
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reminders = useMemo(() => {
     void refreshKey;
