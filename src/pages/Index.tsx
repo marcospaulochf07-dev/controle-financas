@@ -167,7 +167,7 @@ const Index = () => {
   }, [allDriverDailies, year, month]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background notranslate" translate="no">
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-border/50 gradient-header glass" role="banner">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
