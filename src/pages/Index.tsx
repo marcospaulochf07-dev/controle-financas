@@ -230,6 +230,7 @@ const Index = () => {
               {[
                 { value: "lancamentos", label: "Lançamentos", icon: FileText },
                 { value: "diarias", label: "Diárias", icon: Users },
+                { value: "pagos", label: "Pagamentos Realizados", icon: CheckSquare },
                 { value: "graficos", label: "Gráficos", icon: BarChart3 },
                 { value: "comparativo", label: "Comparativo", icon: GitCompare },
               ].map(({ value, label, icon: TabIcon }) => (
