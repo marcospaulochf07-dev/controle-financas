@@ -257,7 +257,7 @@ const Index = () => {
                 {/* Lembretes abaixo dos lançamentos */}
                 <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5" role="region" aria-label="Lembretes de pagamento" aria-live="polite">
                   <div className="lg:col-span-3">
-                    <PaymentReminders expenses={allMonthExpenses} onMarkPaid={handleMarkPaid} />
+                    <PaymentReminders expenses={allMonthExpenses.filter(e => e.source !== "recorrente-auto")} onMarkPaid={handleMarkPaid} />
                   </div>
                   <div className="lg:col-span-2">
                     <RecurringReminders onUpdated={refresh} driverDailiesTotal={driverDailiesTotal} />
