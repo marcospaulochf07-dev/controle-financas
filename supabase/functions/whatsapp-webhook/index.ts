@@ -47,25 +47,14 @@ serve(async (req) => {
 
     const today = new Date().toISOString().split("T")[0];
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: `Você é um assistente de gestão de frota. Interprete mensagens de WhatsApp sobre gastos/despesas de uma empresa de transporte com vans.
+    const systemPrompt = `Você é um assistente de gestão de frota. Interprete mensagens de WhatsApp sobre gastos/despesas de uma empresa de transporte com vans.
 
-Identifique a AÇÃO da mensagem:
+Identifique a AÇÃO da mensagem e retorne APENAS um JSON válido (sem markdown, sem backticks):
 
 1. **register_expense** — Quando o usuário quer REGISTRAR um novo gasto. Ex: "Troca de pneus Van 01 R$450", "Seguro R$400 pendente"
 2. **mark_paid_by_description** — Quando o usuário diz que um item específico foi pago, usando a descrição. Ex: "Troca de pneus pago", "Parcela financiamento paga"
 3. **mark_paid_by_category** — Quando o usuário diz que uma categoria inteira foi paga. Ex: "Contador paga", "Seguro pago", "Financiamento pago"
-4. **register_daily** — Quando o usuário quer registrar diárias de motoristas. Ex: "1 diária para Valdir", "Coloque 2 diárias para João", "3 rotas para Maria", "Coloque 1 diária para Valdir"
+4. **register_daily** — Quando o usuário quer registrar diárias de motoristas. Ex: "1 diária para Valdir", "Coloque 2 diárias para João", "3 rotas para Maria"
 
 Para register_expense, extraia:
 - date: data (YYYY-MM-DD, use ${today} se não especificada)
@@ -79,57 +68,33 @@ Para mark_paid_by_description, extraia:
 - search_description: a descrição do item a ser marcado como pago
 
 Para mark_paid_by_category, extraia:
-- search_category: a categoria a ser marcada como paga
+- search_category: a categoria a ser marcada como paga (manutencao, seguro, imposto, financiamento, salario, fgts, contador, rastreador, diaria, outros)
 
 Para register_daily, extraia:
 - driver_name: nome do motorista (OBRIGATÓRIO)
 - routes: número de rotas/diárias (default: 1, mínimo 1, máximo 10)
 - vehicle: veículo se mencionado (default: "Geral")
 
-Se não parecer nenhuma dessas ações, use action "invalid".`,
+Se não parecer nenhuma dessas ações, use action "invalid".
+
+Responda SOMENTE com o JSON, exemplo: {"action":"register_expense","date":"2026-03-17","category":"manutencao","description":"Troca de pneus","vehicle":"Van 01","amount":450,"status":"pago"}`;
+
+    const aiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            { role: "user", parts: [{ text: `${systemPrompt}\n\nMensagem do usuário: "${messageBody}"` }] },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.1,
           },
-          { role: "user", content: messageBody },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "process_message",
-              description: "Processa a mensagem do WhatsApp",
-              parameters: {
-                type: "object",
-                properties: {
-                  action: {
-                    type: "string",
-                    enum: ["register_expense", "mark_paid_by_description", "mark_paid_by_category", "register_daily", "invalid"],
-                  },
-                  date: { type: "string", description: "Data YYYY-MM-DD (para register_expense)" },
-                  category: {
-                    type: "string",
-                    enum: ["manutencao", "seguro", "imposto", "financiamento", "salario", "fgts", "contador", "rastreador", "diaria", "outros"],
-                  },
-                  description: { type: "string" },
-                  vehicle: { type: "string" },
-                  amount: { type: "number" },
-                  status: { type: "string", enum: ["pago", "pendente"] },
-                  search_description: { type: "string", description: "Descrição do item a marcar como pago" },
-                  search_category: {
-                    type: "string",
-                    enum: ["manutencao", "seguro", "imposto", "financiamento", "salario", "fgts", "contador", "rastreador", "diaria", "outros"],
-                    description: "Categoria a marcar como paga",
-                  },
-                  driver_name: { type: "string", description: "Nome do motorista (para register_daily)" },
-                  routes: { type: "number", description: "Número de rotas/diárias (default 1)" },
-                },
-                required: ["action"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "process_message" } },
-      }),
-    });
+        }),
+      }
+    );
 
     if (!aiResponse.ok) {
       if (aiResponse.status === 429) {
