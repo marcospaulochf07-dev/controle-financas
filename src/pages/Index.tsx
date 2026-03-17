@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, ChevronLeft, ChevronRight, BarChart3, FileText, Users, GitCompare } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, BarChart3, FileText, Users, GitCompare, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
