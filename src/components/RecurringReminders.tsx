@@ -19,6 +19,8 @@ const DEFAULT_RECURRING: Omit<RecurringReminder, "id">[] = [
 interface Props {
   onUpdated: () => void;
   driverDailiesTotal?: number;
+  selectedYear?: number;
+  selectedMonth?: number;
 }
 
 function getMonthKey() {
