@@ -66,13 +66,17 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
     return buildConsolidatedDriverExpenses(expenses, allDailies, year, month);
   }, [expenses, allDailies, year, month]);
 
+  const syncingRef = React.useRef(false);
   useEffect(() => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
     void syncDriverDailyExpenses(expenses, allDailies, year, month).then((changed) => {
+      syncingRef.current = false;
       if (changed) {
         onUpdated();
       }
-    });
-  }, [expenses, allDailies, year, month, onUpdated]);
+    }).catch(() => { syncingRef.current = false; });
+  }, [allDailies, year, month]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getDriverExpense = (name: string) => {
     return driverExpenses.find((e) => e.description === getDriverDailyDescription(name, year, month));
