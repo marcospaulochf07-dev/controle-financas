@@ -76,8 +76,7 @@ const Index = () => {
   const filtered = useMemo(() => {
     return allMonthExpenses.filter((e) => {
       const matchVehicle = vehicleFilter === "Todos" || e.vehicle === vehicleFilter;
-      const isDriverDaily = e.source === "diaria-auto" || (e.category === "diaria" && e.source === "whatsapp");
-      return matchVehicle && !isDriverDaily;
+      return matchVehicle;
     });
   }, [allMonthExpenses, vehicleFilter]);
 
