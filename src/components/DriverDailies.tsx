@@ -107,15 +107,9 @@ export function DriverDailies({ year, month, expenses, onUpdated }: Props) {
     await deleteDriverDailyAsync(id);
 
     if (daily) {
-      const remainingTotal = filtered
-        .filter((d) => d.driverName === daily.driverName && d.id !== id)
-        .reduce((s, d) => s + d.routes * d.valuePerRoute, 0);
-
-      if (remainingTotal === 0) {
-        const exp = getDriverExpense(daily.driverName);
-        if (exp) await deleteExpense(exp.id);
-      } else {
-        await syncDriverExpense(daily.driverName, remainingTotal);
+      const remainingDriverHasDailies = filtered.some((d) => d.driverName === daily.driverName && d.id !== id);
+      if (!remainingDriverHasDailies) {
+        toast("Última diária do motorista removida.");
       }
     }
 

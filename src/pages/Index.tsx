@@ -106,6 +106,23 @@ const Index = () => {
   const revenue = getMonthlyRevenue(monthKey);
   const margin = revenue - totalCost;
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncDailies = async () => {
+      const changed = await syncDriverDailyExpenses(allExpenses, allDriverDailies, year, month);
+      if (changed && !cancelled) {
+        refreshExpenses();
+      }
+    };
+
+    void syncDailies();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [allExpenses, allDriverDailies, year, month, refreshExpenses]);
+
   const prevMonth = () => {
     if (month === 0) {
       setMonth(11);

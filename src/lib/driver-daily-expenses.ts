@@ -92,6 +92,7 @@ export async function syncDriverDailyExpenses(
   );
 
   const existingRowsByDriver = new Map<string, Expense[]>();
+  let didChange = false;
 
   for (const expense of monthDriverExpenses) {
     const driverName = extractDriverNameFromDailyDescription(expense.description);
@@ -109,6 +110,7 @@ export async function syncDriverDailyExpenses(
   for (const [driverName, existingRows] of existingRowsByDriver.entries()) {
     if (desiredRowsByDriver.has(driverName)) continue;
 
+    didChange = true;
     for (const row of existingRows) {
       await deleteExpense(row.id);
     }
@@ -129,6 +131,7 @@ export async function syncDriverDailyExpenses(
 
     if (!needsReplace) continue;
 
+    didChange = true;
     for (const row of existingRows) {
       await deleteExpense(row.id);
     }
@@ -143,4 +146,6 @@ export async function syncDriverDailyExpenses(
       source: "diaria-auto",
     });
   }
+
+  return didChange;
 }
