@@ -100,7 +100,7 @@ async function syncRecurringToExpenses(reminders: RecurringReminder[]): Promise<
   return created;
 }
 
-export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props) {
+export function RecurringReminders({ onUpdated, driverDailiesTotal = 0, selectedYear, selectedMonth }: Props) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState("");

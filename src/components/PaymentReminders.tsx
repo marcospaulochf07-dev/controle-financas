@@ -55,15 +55,17 @@ export function PaymentReminders({ expenses, onMarkPaid, isFutureMonth = false }
               <span className="text-sm font-bold tabular-nums text-warning whitespace-nowrap">
                 {e.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
               </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 w-8 p-0 text-profit hover:bg-profit/10 hover:text-profit rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                onClick={() => onMarkPaid(e.id)}
-                aria-label={`Marcar ${CATEGORY_LABELS[e.category]} como pago`}
-              >
-                <CheckCircle2 className="h-4.5 w-4.5" />
-              </Button>
+              {!isFutureMonth && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0 text-profit hover:bg-profit/10 hover:text-profit rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                  onClick={() => onMarkPaid(e.id)}
+                  aria-label={`Marcar ${CATEGORY_LABELS[e.category]} como pago`}
+                >
+                  <CheckCircle2 className="h-4.5 w-4.5" />
+                </Button>
+              )}
             </div>
           </motion.div>
         ))}
