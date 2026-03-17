@@ -265,6 +265,11 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0, selected
   const today = new Date().getDate();
   const totalMonthly = reminders.reduce((s, r) => s + r.amount, 0);
 
+  const now2 = new Date();
+  const isFutureMonth = selectedYear !== undefined && selectedMonth !== undefined
+    ? (selectedYear > now2.getFullYear() || (selectedYear === now2.getFullYear() && selectedMonth > now2.getMonth()))
+    : false;
+
   const pendingReminders = reminders.filter((r) => !r.paid);
   const paidReminders = reminders.filter((r) => r.paid);
 
