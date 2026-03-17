@@ -194,6 +194,18 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0 }: Props)
       if (data && data.length > 0) {
         const newStatus = reminder.paid ? "pendente" : "pago";
         await supabase.from("expenses").update({ status: newStatus }).eq("id", data[0].id);
+      } else if (!reminder.paid) {
+        // Expense doesn't exist yet — create it as "pago"
+        const day = Math.min(reminder.dayOfMonth, 28);
+        await saveExpense({
+          date: `${monthStr}-${String(day).padStart(2, "0")}`,
+          category: reminder.category,
+          description: reminder.label,
+          vehicle: "Geral",
+          amount: reminder.amount,
+          status: "pago",
+          source: "recorrente-auto",
+        });
       }
     }
 
