@@ -21,9 +21,9 @@ export function PaymentReminders({ expenses, onMarkPaid, isFutureMonth = false, 
   if (pending.length === 0) {
     return (
       <div className="rounded-2xl border border-border/50 bg-card p-6 shadow-card" role="status">
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-foreground/65">Pagamentos Pendentes</h3>
-        <div className="flex items-center gap-2 text-sm text-foreground/72">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Pagamentos Pendentes</h3>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-profit" aria-hidden="true" />
           Tudo em dia! Nenhum pagamento pendente.
         </div>
       </div>
@@ -35,8 +35,8 @@ export function PaymentReminders({ expenses, onMarkPaid, isFutureMonth = false, 
   return (
     <div className={`rounded-2xl border border-border/50 bg-card p-6 shadow-card ${isFutureMonth ? "opacity-50" : ""}`} role="region" aria-label="Pagamentos pendentes">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-foreground/65">Pagamentos Pendentes</h3>
-        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700 ring-1 ring-amber-200" role="status" aria-live="polite">
+        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Pagamentos Pendentes</h3>
+        <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2.5 py-0.5 text-xs font-bold text-warning ring-1 ring-warning/20" role="status" aria-live="polite">
           <AlertTriangle className="h-3 w-3" aria-hidden="true" />{pending.length} pendente{pending.length > 1 ? "s" : ""}
         </span>
       </div>
@@ -47,38 +47,28 @@ export function PaymentReminders({ expenses, onMarkPaid, isFutureMonth = false, 
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3, delay: i * 0.04 }}
-            className={`flex items-center justify-between rounded-xl border px-4 py-3 transition-colors ${
-              i % 2 === 0
-                ? "border-amber-200 bg-amber-50/70 hover:bg-amber-50"
-                : "border-amber-200/80 bg-background hover:bg-amber-50/40"
-            }`}
+            className="flex items-center justify-between rounded-xl border border-warning/20 bg-warning/5 px-4 py-3 transition-colors hover:bg-warning/10"
             role="listitem"
           >
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-foreground">{CATEGORY_LABELS[e.category]}</p>
-                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">
-                  Em aberto
-                </span>
-              </div>
-              <p className="mt-1 truncate text-xs leading-5 text-foreground/72">
+              <p className="text-sm font-semibold">{CATEGORY_LABELS[e.category]}</p>
+              <p className="text-xs text-muted-foreground truncate">
                 {e.description ? `${e.description} · ` : ""}{vehicleNameMap[e.vehicle] || e.vehicle} · {formatDateForDisplay(e.date)}
               </p>
             </div>
             <div className="flex items-center gap-3 ml-3">
-              <span className="whitespace-nowrap text-sm font-bold tabular-nums text-amber-800">
+              <span className="text-sm font-bold tabular-nums text-warning whitespace-nowrap">
                 {e.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
               </span>
               {!isFutureMonth && (
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="h-8 gap-1 rounded-lg border-emerald-200 bg-emerald-50 px-2 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                  variant="ghost"
+                  className="h-8 w-8 p-0 text-profit hover:bg-profit/10 hover:text-profit rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                   onClick={() => onMarkPaid(e)}
                   aria-label={`Marcar ${CATEGORY_LABELS[e.category]} como pago`}
                 >
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Pagar</span>
+                  <CheckCircle2 className="h-4.5 w-4.5" />
                 </Button>
               )}
             </div>
@@ -86,8 +76,8 @@ export function PaymentReminders({ expenses, onMarkPaid, isFutureMonth = false, 
         ))}
       </div>
       <div className="mt-4 flex items-center justify-between border-t border-border/50 pt-4">
-        <span className="text-sm font-semibold text-foreground/72">Total pendente</span>
-        <span className="text-base font-bold tabular-nums text-amber-800" aria-live="polite">
+        <span className="text-sm text-muted-foreground font-semibold">Total pendente</span>
+        <span className="text-base font-bold tabular-nums text-warning" aria-live="polite">
           {totalPending.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
         </span>
       </div>

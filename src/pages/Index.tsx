@@ -274,14 +274,14 @@ const Index = () => {
           </Select>
         </motion.div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" role="region" aria-label="Métricas financeiras">
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-3" role="region" aria-label="Métricas financeiras">
           <div>
-            <MetricCard label="Receita Bruta (Usina)" value={revenue} type="revenue" delay={0.1} />
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-2 px-1">
+            <MetricCard label="Receita Bruta (Usina)" value={revenue} delay={0.1} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-1 px-1">
               <RevenueEditor month={monthKey} currentValue={revenue} onUpdated={() => void refresh()} />
             </motion.div>
           </div>
-          <MetricCard label="Custo Operacional Total" value={totalCost} type="cost" delay={0.2} />
+          <MetricCard label="Custo Operacional Total" value={totalCost} delay={0.2} />
           <MetricCard label="Margem Líquida" value={margin} type={margin >= 0 ? "profit" : "loss"} delay={0.3} />
         </div>
 
@@ -315,21 +315,21 @@ const Index = () => {
 
           {activeTab === "lancamentos" && (
             <motion.div key="lancamentos" variants={tabAnimVariants} initial="hidden" animate="visible">
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-                <div className="rounded-2xl border border-border/50 bg-card p-5 shadow-card lg:col-span-3">
+              <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-4">
+                <div className="self-start rounded-2xl border border-border/50 bg-card p-5 shadow-card lg:col-span-3">
                   <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                     Lançamentos — {MONTHS[month]} {year}
                   </h2>
                   <ExpenseTable expenses={filteredLaunchExpenses} onDelete={handleDeleteExpense} vehicleNameMap={vehicleNameMap} />
                 </div>
-                <div className="space-y-6">
+                <div className="self-start space-y-6">
                   <CostBreakdown expenses={monthFinancialEntries} />
                   <VehicleManager onUpdated={() => void refresh()} />
                 </div>
               </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5" role="region" aria-label="Lembretes de pagamento" aria-live="polite">
-                <div className="lg:col-span-3">
+              <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-5" role="region" aria-label="Lembretes de pagamento" aria-live="polite">
+                <div className="self-start lg:col-span-3">
                   <PaymentReminders
                     expenses={pendingEntries}
                     onMarkPaid={handleMarkPaid}
@@ -337,7 +337,7 @@ const Index = () => {
                     vehicleNameMap={vehicleNameMap}
                   />
                 </div>
-                <div className="lg:col-span-2">
+                <div className="self-start lg:col-span-2">
                   <RecurringReminders
                     expenses={allExpenses}
                     onUpdated={() => void refresh()}
@@ -365,7 +365,7 @@ const Index = () => {
 
           {activeTab === "graficos" && (
             <motion.div key="graficos" variants={tabAnimVariants} initial="hidden" animate="visible">
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
                 <RevenueChart allExpenses={allExpenses} allDriverDailies={allDriverDailies} revenues={revenues} year={year} />
                 <CostPieChart expenses={monthFinancialEntries} />
               </div>
