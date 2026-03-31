@@ -7,6 +7,372 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const APP_TIMEZONE = "America/Sao_Paulo";
+const CONVERSATION_TTL_MS = 15 * 60 * 1000;
+
+type ConversationState = {
+  sender: string;
+  pending_action: string;
+  pending_payload: Record<string, unknown>;
+  expires_at: string;
+};
+
+type GeminiPayload = {
+  action?: string;
+  reply?: string;
+  needs_follow_up?: boolean;
+  pending_action?: string | null;
+  pending_payload?: Record<string, unknown> | null;
+  date?: string;
+  month_key?: string;
+  category?: string;
+  description?: string;
+  vehicle?: string;
+  amount?: number;
+  status?: "pago" | "pendente";
+  search_description?: string;
+  search_category?: string;
+  driver_name?: string;
+  routes?: number;
+  routes_to_pay?: number;
+  pay_all?: boolean;
+};
+
+function escapeXml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function twiml(message: string) {
+  return `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeXml(message)}</Message></Response>`;
+}
+
+function getDatePartsInTimeZone(date = new Date(), timeZone = APP_TIMEZONE) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value),
+    month: Number(parts.find((part) => part.type === "month")?.value),
+    day: Number(parts.find((part) => part.type === "day")?.value),
+  };
+}
+
+function formatDateParts(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function getTodayInTimeZone() {
+  const { year, month, day } = getDatePartsInTimeZone();
+  return formatDateParts(year, month, day);
+}
+
+function getMonthBoundsFromKey(monthKey: string) {
+  const [yearString, monthString] = monthKey.split("-");
+  const year = Number(yearString);
+  const month = Number(monthString);
+  const start = `${yearString}-${monthString}-01`;
+
+  if (month === 12) {
+    return { monthKey, start, endExclusive: `${year + 1}-01-01` };
+  }
+
+  return {
+    monthKey,
+    start,
+    endExclusive: `${yearString}-${String(month + 1).padStart(2, "0")}-01`,
+  };
+}
+
+function getCurrentMonthBounds() {
+  const { year, month } = getDatePartsInTimeZone();
+  return getMonthBoundsFromKey(`${year}-${String(month).padStart(2, "0")}`);
+}
+
+function normalizeText(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+async function getConversationState(supabase: ReturnType<typeof createClient>, sender: string) {
+  const { data, error } = await supabase
+    .from("whatsapp_conversation_state")
+    .select("*")
+    .eq("sender", sender)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error loading conversation state:", error);
+    return null;
+  }
+
+  if (!data) return null;
+  if (new Date(data.expires_at).getTime() < Date.now()) {
+    await clearConversationState(supabase, sender);
+    return null;
+  }
+
+  return data as ConversationState;
+}
+
+async function saveConversationState(
+  supabase: ReturnType<typeof createClient>,
+  sender: string,
+  pendingAction: string,
+  pendingPayload: Record<string, unknown>,
+) {
+  const expiresAt = new Date(Date.now() + CONVERSATION_TTL_MS).toISOString();
+  const { error } = await supabase.from("whatsapp_conversation_state").upsert(
+    {
+      sender,
+      pending_action: pendingAction,
+      pending_payload: pendingPayload,
+      expires_at: expiresAt,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "sender" },
+  );
+
+  if (error) {
+    console.error("Error saving conversation state:", error);
+  }
+}
+
+async function clearConversationState(supabase: ReturnType<typeof createClient>, sender: string) {
+  const { error } = await supabase.from("whatsapp_conversation_state").delete().eq("sender", sender);
+  if (error) {
+    console.error("Error clearing conversation state:", error);
+  }
+}
+
+function buildPrompt(today: string, pendingState: ConversationState | null, messageBody: string) {
+  return `Você é um assistente de gestão financeira de frota via WhatsApp. Entenda português do Brasil coloquial e responda SOMENTE com JSON válido.
+
+Data de hoje em ${APP_TIMEZONE}: ${today}
+Contexto pendente atual: ${JSON.stringify(pendingState ? {
+    pending_action: pendingState.pending_action,
+    pending_payload: pendingState.pending_payload,
+  } : null)}
+
+Formato obrigatório de resposta:
+{
+  "action": "chat|register_expense|mark_paid_by_description|mark_paid_by_category|register_daily|pay_daily_routes",
+  "reply": "texto em pt-BR para responder ao usuário quando action=chat ou quando precisar perguntar algo",
+  "needs_follow_up": false,
+  "pending_action": null,
+  "pending_payload": null,
+  "date": "YYYY-MM-DD",
+  "month_key": "YYYY-MM",
+  "category": "manutencao|seguro|imposto|financiamento|salario|fgts|contador|rastreador|outros",
+  "description": "descrição curta",
+  "vehicle": "Van 01|Geral|...",
+  "amount": 0,
+  "status": "pago|pendente",
+  "search_description": "",
+  "search_category": "manutencao|seguro|imposto|financiamento|salario|fgts|contador|rastreador|outros",
+  "driver_name": "",
+  "routes": 1,
+  "routes_to_pay": 1,
+  "pay_all": false
+}
+
+Regras:
+- Use "chat" para conversa natural, cumprimento, agradecimento, dúvida geral ou qualquer mensagem fora do fluxo financeiro.
+- Se a pessoa quiser executar uma ação mas faltar dado, use action "chat", needs_follow_up=true, pending_action com a ação real, pending_payload com o que já foi entendido e reply perguntando só o que falta.
+- Se existir contexto pendente, combine a mensagem atual com esse contexto para concluir a ação quando possível.
+- Nunca use category "diaria" em register_expense. Diárias devem usar register_daily e pagamentos de diária devem usar pay_daily_routes.
+- Para register_daily, use routes padrão 1, vehicle padrão "Geral" e date padrão ${today}.
+- Para pay_daily_routes, use month_key padrão do mês atual se não for mencionado. Se a pessoa disser "tudo", marque pay_all=true.
+- Para mensagens informais ou abertas, responda de forma curta, útil e amigável em reply, sem inventar dados financeiros.
+- Não use markdown, não use crases, não explique o JSON.
+
+Mensagem do usuário: "${messageBody}"`;
+}
+
+async function callGemini(prompt: string, apiKey: string) {
+  const requestBody = JSON.stringify({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.2,
+    },
+  });
+
+  const models = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+  const timeouts = [10000, 4000];
+  let response: Response | null = null;
+  let lastError = "";
+
+  for (let index = 0; index < models.length; index += 1) {
+    const model = models[index];
+    try {
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(timeouts[index]),
+          body: requestBody,
+        },
+      );
+
+      if (geminiResponse.ok) {
+        response = geminiResponse;
+        break;
+      }
+
+      lastError = `${model} (${geminiResponse.status}): ${await geminiResponse.text()}`;
+      console.error("Gemini API error:", lastError);
+
+      if (geminiResponse.status === 429) {
+        throw new Error("Rate limit exceeded, tente novamente em instantes.");
+      }
+    } catch (error) {
+      lastError = `${model}: ${error}`;
+      console.error("Gemini fetch error:", lastError);
+    }
+  }
+
+  if (!response) {
+    throw new Error(`All Gemini models failed. Last error: ${lastError}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini did not return content");
+
+  try {
+    return JSON.parse(text) as GeminiPayload;
+  } catch (error) {
+    console.error("Failed to parse Gemini response:", text);
+    throw new Error("Failed to parse AI response as JSON");
+  }
+}
+
+async function ensureDriverExists(supabase: ReturnType<typeof createClient>, driverName: string) {
+  const normalized = normalizeText(driverName);
+  if (!normalized) return;
+
+  const { error } = await supabase.from("drivers").upsert(
+    {
+      name: normalized,
+      active: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "name" },
+  );
+
+  if (error) {
+    console.error("Error ensuring driver exists:", error);
+  }
+}
+
+async function ensureVehicleExists(supabase: ReturnType<typeof createClient>, vehicleId: string) {
+  const normalized = normalizeText(vehicleId || "Geral");
+  if (!normalized) return;
+
+  const { error } = await supabase.from("vehicles").upsert(
+    {
+      id: normalized,
+      display_name: normalized,
+      active: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    console.error("Error ensuring vehicle exists:", error);
+  }
+}
+
+async function getDriverOutstandingAmount(
+  supabase: ReturnType<typeof createClient>,
+  driverName: string,
+  monthStart: string,
+  monthEnd: string,
+) {
+  const { data, error } = await supabase
+    .from("driver_dailies")
+    .select("routes, paid_routes, value_per_route")
+    .eq("driver_name", driverName)
+    .gte("date", monthStart)
+    .lt("date", monthEnd);
+
+  if (error || !data) {
+    console.error("Error loading driver outstanding amount:", error);
+    return 0;
+  }
+
+  return data.reduce((sum, row) => {
+    const unpaidRoutes = Math.max(Number(row.routes) - Number(row.paid_routes || 0), 0);
+    return sum + unpaidRoutes * Number(row.value_per_route || 0);
+  }, 0);
+}
+
+async function payDriverRoutes(
+  supabase: ReturnType<typeof createClient>,
+  driverName: string,
+  routesToPay: number,
+  monthStart: string,
+  monthEnd: string,
+) {
+  const { data, error } = await supabase
+    .from("driver_dailies")
+    .select("id, date, created_at, routes, paid_routes, value_per_route")
+    .eq("driver_name", driverName)
+    .gte("date", monthStart)
+    .lt("date", monthEnd)
+    .order("date", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Erro ao carregar diárias de ${driverName}: ${error.message}`);
+  }
+
+  const openRows = (data || []).filter((row) => Number(row.routes) > Number(row.paid_routes || 0));
+  if (openRows.length === 0) {
+    return { paidRoutes: 0, remainingDebt: 0 };
+  }
+
+  let remaining = routesToPay;
+  let paidRoutes = 0;
+
+  for (const row of openRows) {
+    if (remaining <= 0) break;
+
+    const currentPaid = Number(row.paid_routes || 0);
+    const routes = Number(row.routes || 0);
+    const available = Math.max(routes - currentPaid, 0);
+    const allocating = Math.min(available, remaining);
+
+    if (allocating <= 0) continue;
+
+    const { error: updateError } = await supabase
+      .from("driver_dailies")
+      .update({ paid_routes: currentPaid + allocating })
+      .eq("id", row.id);
+
+    if (updateError) {
+      throw new Error(`Erro ao atualizar rotas pagas: ${updateError.message}`);
+    }
+
+    paidRoutes += allocating;
+    remaining -= allocating;
+  }
+
+  const remainingDebt = await getDriverOutstandingAmount(supabase, driverName, monthStart, monthEnd);
+  return { paidRoutes, remainingDebt };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -23,10 +389,9 @@ serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
+    const contentType = req.headers.get("content-type") || "";
     let messageBody = "";
     let senderNumber = "";
-    const contentType = req.headers.get("content-type") || "";
 
     if (contentType.includes("application/x-www-form-urlencoded")) {
       const formData = await req.formData();
@@ -39,287 +404,264 @@ serve(async (req) => {
     }
 
     if (!messageBody.trim()) {
-      return new Response(
-        JSON.stringify({ error: "Mensagem vazia" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Mensagem vazia" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayInTimeZone();
+    const pendingState = await getConversationState(supabase, senderNumber || "manual");
+    const parsed = await callGemini(buildPrompt(today, pendingState, messageBody), GEMINI_API_KEY);
 
-    const systemPrompt = `Você é um assistente de gestão de frota. Interprete mensagens de WhatsApp sobre gastos/despesas de uma empresa de transporte com vans.
-
-Identifique a AÇÃO da mensagem e retorne APENAS um JSON válido (sem markdown, sem backticks):
-
-1. **register_expense** — Quando o usuário quer REGISTRAR um novo gasto. Ex: "Troca de pneus Van 01 R$450", "Seguro R$400 pendente"
-2. **mark_paid_by_description** — Quando o usuário diz que um item específico foi pago, usando a descrição. Ex: "Troca de pneus pago", "Parcela financiamento paga"
-3. **mark_paid_by_category** — Quando o usuário diz que uma categoria inteira foi paga. Ex: "Contador paga", "Seguro pago", "Financiamento pago"
-4. **register_daily** — Quando o usuário quer registrar diárias de motoristas. Ex: "1 diária para Valdir", "Coloque 2 diárias para João", "3 rotas para Maria"
-
-Para register_expense, extraia:
-- date: data (YYYY-MM-DD, use ${today} se não especificada)
-- category: (manutencao, seguro, imposto, financiamento, salario, fgts, contador, rastreador, diaria, outros)
-- description: descrição curta
-- vehicle: veículo (ex: "Van 01", "Geral" se não especificado)
-- amount: valor em reais (OBRIGATÓRIO, número > 0)
-- status: "pago" ou "pendente" (default: "pago")
-
-Para mark_paid_by_description, extraia:
-- search_description: a descrição do item a ser marcado como pago
-
-Para mark_paid_by_category, extraia:
-- search_category: a categoria a ser marcada como paga (manutencao, seguro, imposto, financiamento, salario, fgts, contador, rastreador, diaria, outros)
-
-Para register_daily, extraia:
-- driver_name: nome do motorista (OBRIGATÓRIO)
-- routes: número de rotas/diárias (default: 1, mínimo 1, máximo 10)
-- vehicle: veículo se mencionado (default: "Geral")
-
-Se não parecer nenhuma dessas ações, use action "invalid".
-
-Responda SOMENTE com o JSON, exemplo: {"action":"register_expense","date":"2026-03-17","category":"manutencao","description":"Troca de pneus","vehicle":"Van 01","amount":450,"status":"pago"}`;
-
-    const geminiRequestBody = JSON.stringify({
-      contents: [
-        { role: "user", parts: [{ text: `${systemPrompt}\n\nMensagem do usuário: "${messageBody}"` }] },
-      ],
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.1,
-      },
-    });
-
-    const models = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
-    const timeouts = [10000, 4000]; // First model gets 10s, fallback gets 4s (total ~14s < Twilio 15s)
-    let aiResponse: Response | null = null;
-    let lastError = "";
-
-    for (let i = 0; i < models.length; i++) {
-      const model = models[i];
-      const timeout = timeouts[i];
-      try {
-        const resp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: AbortSignal.timeout(timeout),
-            body: geminiRequestBody,
-          }
+    if (parsed.action === "chat" || parsed.needs_follow_up) {
+      if (parsed.needs_follow_up && parsed.pending_action) {
+        await saveConversationState(
+          supabase,
+          senderNumber || "manual",
+          parsed.pending_action,
+          parsed.pending_payload || {},
         );
-
-        if (resp.ok) {
-          aiResponse = resp;
-          break;
-        }
-
-        const errText = await resp.text();
-        lastError = `${model} (${resp.status}): ${errText}`;
-        console.error("Gemini API error:", lastError);
-
-        if (resp.status === 429) {
-          return new Response(
-            JSON.stringify({ error: "Rate limit exceeded, tente novamente em instantes." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        // For 503 or other errors, try next model immediately
-      } catch (fetchErr) {
-        lastError = `${model}: ${fetchErr}`;
-        console.error("Fetch error:", lastError);
-        // Try next model
+      } else {
+        await clearConversationState(supabase, senderNumber || "manual");
       }
+
+      return new Response(twiml(parsed.reply || "Posso te ajudar com lançamentos, diárias, pagamentos ou dúvidas rápidas da operação."), {
+        headers: { ...corsHeaders, "Content-Type": "text/xml" },
+      });
     }
 
-    if (!aiResponse) {
-      throw new Error(`All Gemini models failed. Last error: ${lastError}`);
-    }
+    const monthBounds = getMonthBoundsFromKey(parsed.month_key || getCurrentMonthBounds().monthKey);
 
-    const aiData = await aiResponse.json();
-    const textContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!textContent) throw new Error("Gemini did not return content");
-
-    let parsed;
-    try {
-      parsed = JSON.parse(textContent);
-    } catch (parseErr) {
-      console.error("Failed to parse Gemini response:", textContent);
-      throw new Error("Failed to parse AI response as JSON");
-    }
-
-    
-
-    // === INVALID ===
-    if (parsed.action === "invalid") {
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>❓ Não entendi. Envie algo como:\n• "Troca de pneus Van 01 R$450"\n• "Contador paga"\n• "1 diária para Valdir"</Message></Response>`;
-      return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
-    }
-
-    // Current month range for filtering
-    const now = new Date();
-    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    const nextMonth = now.getMonth() === 11
-      ? `${now.getFullYear() + 1}-01-01`
-      : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, "0")}-01`;
-
-    // === MARK PAID BY DESCRIPTION ===
     if (parsed.action === "mark_paid_by_description") {
-      const search = parsed.search_description || parsed.description || "";
-      const { data: items, error: qErr } = await supabase
+      const search = normalizeText(parsed.search_description || parsed.description || "");
+      if (!search) {
+        await saveConversationState(supabase, senderNumber || "manual", "mark_paid_by_description", {});
+        return new Response(twiml("Qual é a descrição do item que você quer marcar como pago?"), {
+          headers: { ...corsHeaders, "Content-Type": "text/xml" },
+        });
+      }
+
+      const { data: items, error } = await supabase
         .from("expenses")
         .select("*")
+        .neq("category", "diaria")
         .eq("status", "pendente")
         .ilike("description", `%${search}%`)
-        .gte("date", monthStart)
-        .lt("date", nextMonth)
+        .gte("date", monthBounds.start)
+        .lt("date", monthBounds.endExclusive)
         .order("date", { ascending: true })
         .limit(1);
 
-      if (qErr || !items || items.length === 0) {
-        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>❌ Nenhum item pendente encontrado com "${search}" neste mês.</Message></Response>`;
-        return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+      if (error || !items || items.length === 0) {
+        return new Response(twiml(`Não encontrei item pendente com "${search}" nesse mês.`), {
+          headers: { ...corsHeaders, "Content-Type": "text/xml" },
+        });
       }
 
-      const item = items[0];
-      await supabase.from("expenses").update({ status: "pago" }).eq("id", item.id);
+      await supabase.from("expenses").update({ status: "pago" }).eq("id", items[0].id);
+      await clearConversationState(supabase, senderNumber || "manual");
 
-      const amt = Number(item.amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Marcado como PAGO!\n📋 ${item.description}\n💰 R$ ${amt}\n📂 ${item.category}</Message></Response>`;
-      return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+      const amount = Number(items[0].amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+      return new Response(twiml(`Pagamento confirmado.\n${items[0].description}\nR$ ${amount}`), {
+        headers: { ...corsHeaders, "Content-Type": "text/xml" },
+      });
     }
 
-    // === MARK PAID BY CATEGORY ===
     if (parsed.action === "mark_paid_by_category") {
-      const cat = parsed.search_category || parsed.category || "";
-      const { data: items, error: qErr } = await supabase
+      const category = normalizeText(parsed.search_category || parsed.category || "");
+      if (!category) {
+        await saveConversationState(supabase, senderNumber || "manual", "mark_paid_by_category", {});
+        return new Response(twiml("Qual categoria você quer marcar como paga?"), {
+          headers: { ...corsHeaders, "Content-Type": "text/xml" },
+        });
+      }
+
+      const { data: items, error } = await supabase
         .from("expenses")
         .select("*")
+        .neq("category", "diaria")
         .eq("status", "pendente")
-        .eq("category", cat)
-        .gte("date", monthStart)
-        .lt("date", nextMonth)
+        .eq("category", category)
+        .gte("date", monthBounds.start)
+        .lt("date", monthBounds.endExclusive)
         .order("date", { ascending: true })
         .limit(1);
 
-      if (qErr || !items || items.length === 0) {
-        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>❌ Nenhum item pendente na categoria "${cat}".</Message></Response>`;
-        return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+      if (error || !items || items.length === 0) {
+        return new Response(twiml(`Não encontrei item pendente na categoria "${category}" nesse mês.`), {
+          headers: { ...corsHeaders, "Content-Type": "text/xml" },
+        });
       }
 
-      const item = items[0];
-      await supabase.from("expenses").update({ status: "pago" }).eq("id", item.id);
+      await supabase.from("expenses").update({ status: "pago" }).eq("id", items[0].id);
+      await clearConversationState(supabase, senderNumber || "manual");
 
-      const amt = Number(item.amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Marcado como PAGO!\n📋 ${item.description}\n💰 R$ ${amt}\n📂 ${item.category}</Message></Response>`;
-      return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+      const amount = Number(items[0].amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+      return new Response(twiml(`Categoria quitada.\n${items[0].description}\nR$ ${amount}`), {
+        headers: { ...corsHeaders, "Content-Type": "text/xml" },
+      });
     }
 
-    // === REGISTER DAILY ===
     if (parsed.action === "register_daily") {
-      const driverName = parsed.driver_name || "";
-      const numRoutes = Math.max(1, Math.min(10, parsed.routes || 1));
-      const valuePerRoute = 45;
-      const totalAmount = numRoutes * valuePerRoute;
-      const vehicleName = parsed.vehicle || "Geral";
+      const driverName = normalizeText(parsed.driver_name || "");
+      const routes = Math.max(1, Math.min(10, Number(parsed.routes || 1)));
+      const vehicle = normalizeText(parsed.vehicle || "Geral") || "Geral";
+      const date = parsed.date || today;
 
-      if (!driverName.trim()) {
-        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>❌ Nome do motorista não identificado. Envie: "1 diária para [nome]"</Message></Response>`;
-        return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+      if (!driverName) {
+        await saveConversationState(supabase, senderNumber || "manual", "register_daily", {
+          routes,
+          vehicle,
+          date,
+        });
+        return new Response(twiml("Para qual motorista eu devo lançar essa diária?"), {
+          headers: { ...corsHeaders, "Content-Type": "text/xml" },
+        });
       }
 
-      // 1. Insert into driver_dailies table (individual record)
-      const { error: dailyErr } = await supabase.from("driver_dailies").insert({
-        date: today,
-        driver_name: driverName.trim(),
-        routes: numRoutes,
-        value_per_route: valuePerRoute,
-        vehicle: vehicleName,
+      await Promise.all([ensureDriverExists(supabase, driverName), ensureVehicleExists(supabase, vehicle)]);
+
+      const { error } = await supabase.from("driver_dailies").insert({
+        date,
+        driver_name: driverName,
+        routes,
+        paid_routes: 0,
+        value_per_route: 45,
+        vehicle,
         source: "whatsapp",
       });
 
-      if (dailyErr) {
-        console.error("Error inserting driver_daily:", dailyErr);
+      if (error) {
+        throw new Error(`Erro ao salvar diária: ${error.message}`);
       }
 
-      // 2. Sync the consolidated expense (pending payment)
-      const now = new Date();
-      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-      const nextMonth = now.getMonth() === 11
-        ? `${now.getFullYear() + 1}-01-01`
-        : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, "0")}-01`;
+      const monthKey = parsed.month_key || date.slice(0, 7);
+      const bounds = getMonthBoundsFromKey(monthKey);
+      const remainingDebt = await getDriverOutstandingAmount(supabase, driverName, bounds.start, bounds.endExclusive);
 
-      const { data: existing } = await supabase
-        .from("expenses")
-        .select("*")
-        .eq("category", "diaria")
-        .ilike("description", `%${driverName.trim()}%`)
-        .gte("date", monthStart)
-        .lt("date", nextMonth)
-        .order("created_at", { ascending: false })
-        .limit(1);
+      await clearConversationState(supabase, senderNumber || "manual");
+      return new Response(
+        twiml(`Diária registrada.\nMotorista: ${driverName}\nRotas: ${routes}\nValor: R$ ${(routes * 45).toFixed(2)}\nSaldo em aberto no mês: R$ ${remainingDebt.toFixed(2)}`),
+        { headers: { ...corsHeaders, "Content-Type": "text/xml" } },
+      );
+    }
 
-      if (existing && existing.length > 0) {
-        const item = existing[0];
-        const newAmount = Number(item.amount) + totalAmount;
-        await supabase.from("expenses").update({ amount: newAmount }).eq("id", item.id);
+    if (parsed.action === "pay_daily_routes") {
+      const driverName = normalizeText(parsed.driver_name || "");
+      const selectedBounds = getMonthBoundsFromKey(parsed.month_key || getCurrentMonthBounds().monthKey);
+      const routesToPay = parsed.pay_all ? Number.MAX_SAFE_INTEGER : Math.max(1, Number(parsed.routes_to_pay || 0));
 
-        const amtStr = newAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Diária atualizada!\n👤 ${driverName}\n🛣️ +${numRoutes} rota${numRoutes > 1 ? "s" : ""} (R$ ${totalAmount.toFixed(2)})\n💰 Total acumulado: R$ ${amtStr}\n📂 Pendente</Message></Response>`;
-        return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
-      } else {
-        const monthLabel = `${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`;
-        const { error } = await supabase.from("expenses").insert({
-          date: today,
-          category: "diaria",
-          description: `Diárias ${driverName.trim()} - ${monthLabel}`,
-          vehicle: vehicleName,
-          amount: totalAmount,
-          status: "pendente",
-          source: "whatsapp",
+      if (!driverName) {
+        await saveConversationState(supabase, senderNumber || "manual", "pay_daily_routes", {
+          month_key: selectedBounds.monthKey,
+          routes_to_pay: parsed.pay_all ? null : routesToPay,
+          pay_all: Boolean(parsed.pay_all),
         });
-
-        if (error) {
-          console.error("DB insert error:", error);
-          throw new Error(`Database error: ${error.message}`);
-        }
-
-        const amtStr = totalAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-        const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Diária registrada!\n👤 ${driverName}\n🛣️ ${numRoutes} rota${numRoutes > 1 ? "s" : ""}\n💰 R$ ${amtStr}\n📂 Pendente</Message></Response>`;
-        return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+        return new Response(twiml("De qual motorista eu devo baixar essas rotas?"), {
+          headers: { ...corsHeaders, "Content-Type": "text/xml" },
+        });
       }
+
+      if (!parsed.pay_all && routesToPay <= 0) {
+        await saveConversationState(supabase, senderNumber || "manual", "pay_daily_routes", {
+          driver_name: driverName,
+          month_key: selectedBounds.monthKey,
+        });
+        return new Response(twiml("Quantas rotas você quer marcar como pagas?"), {
+          headers: { ...corsHeaders, "Content-Type": "text/xml" },
+        });
+      }
+
+      const payment = await payDriverRoutes(
+        supabase,
+        driverName,
+        routesToPay,
+        selectedBounds.start,
+        selectedBounds.endExclusive,
+      );
+
+      await clearConversationState(supabase, senderNumber || "manual");
+
+      if (payment.paidRoutes === 0) {
+        return new Response(twiml(`Não encontrei rotas em aberto para ${driverName} nesse mês.`), {
+          headers: { ...corsHeaders, "Content-Type": "text/xml" },
+        });
+      }
+
+      return new Response(
+        twiml(`Pagamento parcial registrado.\nMotorista: ${driverName}\nRotas baixadas: ${payment.paidRoutes}\nSaldo em aberto: R$ ${payment.remainingDebt.toFixed(2)}`),
+        { headers: { ...corsHeaders, "Content-Type": "text/xml" } },
+      );
     }
 
-    // === REGISTER EXPENSE ===
-    const amount = Number(parsed.amount) || 0;
-    if (amount <= 0) {
-      const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>❌ Valor não identificado. Envie com o valor, ex: "Troca de pneus R$450"</Message></Response>`;
-      return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
+    if (parsed.action === "register_expense") {
+      const amount = Number(parsed.amount) || 0;
+      const category = normalizeText(parsed.category || "outros");
+      const description = normalizeText(parsed.description || "");
+      const vehicle = normalizeText(parsed.vehicle || "Geral") || "Geral";
+      const status = parsed.status || "pago";
+      const date = parsed.date || today;
+
+      if (category === "diaria") {
+        await saveConversationState(supabase, senderNumber || "manual", "register_daily", {
+          vehicle,
+          date,
+        });
+        return new Response(twiml("Para diária eu preciso do motorista e da quantidade de rotas. Me diga algo como: 2 rotas para João."), {
+          headers: { ...corsHeaders, "Content-Type": "text/xml" },
+        });
+      }
+
+      if (amount <= 0) {
+        await saveConversationState(supabase, senderNumber || "manual", "register_expense", {
+          category,
+          description,
+          vehicle,
+          status,
+          date,
+        });
+        return new Response(twiml("Qual é o valor desse gasto?"), {
+          headers: { ...corsHeaders, "Content-Type": "text/xml" },
+        });
+      }
+
+      await ensureVehicleExists(supabase, vehicle);
+      const { data, error } = await supabase
+        .from("expenses")
+        .insert({
+          date,
+          category,
+          description,
+          vehicle,
+          amount,
+          status,
+          source: "whatsapp",
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(`Erro ao salvar gasto: ${error.message}`);
+      }
+
+      await clearConversationState(supabase, senderNumber || "manual");
+
+      const formattedAmount = Number(data.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+      return new Response(
+        twiml(`Lançamento registrado.\n${data.description || "Sem descrição"}\n${data.vehicle}\nR$ ${formattedAmount}\n${data.status}`),
+        { headers: { ...corsHeaders, "Content-Type": "text/xml" } },
+      );
     }
 
-    const { data, error } = await supabase.from("expenses").insert({
-      date: parsed.date || today,
-      category: parsed.category || "outros",
-      description: parsed.description || "",
-      vehicle: parsed.vehicle || "Geral",
-      amount,
-      status: parsed.status || "pago",
-      source: "whatsapp",
-    }).select().single();
-
-    if (error) {
-      console.error("DB insert error:", error);
-      throw new Error(`Database error: ${error.message}`);
-    }
-
-    const formattedAmount = amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Registrado!\n📋 ${parsed.description || "Sem descrição"}\n🚐 ${parsed.vehicle || "Geral"}\n💰 R$ ${formattedAmount}\n📅 ${parsed.date || today}\n📂 ${parsed.category || "outros"}\n🔖 ${parsed.status || "pago"}</Message></Response>`;
-    return new Response(twiml, { headers: { ...corsHeaders, "Content-Type": "text/xml" } });
-
-  } catch (e) {
-    console.error("Webhook error:", e);
-    const errorMessage = e instanceof Error ? e.message : "Erro desconhecido";
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>❌ Erro ao processar: ${errorMessage}</Message></Response>`;
-    return new Response(twiml, {
+    await clearConversationState(supabase, senderNumber || "manual");
+    return new Response(twiml(parsed.reply || "Posso conversar normalmente e também registrar gastos, diárias e pagamentos."), {
+      headers: { ...corsHeaders, "Content-Type": "text/xml" },
+    });
+  } catch (error) {
+    console.error("Webhook error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+    return new Response(twiml(`Erro ao processar: ${errorMessage}`), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "text/xml" },
     });

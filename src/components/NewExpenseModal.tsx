@@ -5,14 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ExpenseCategory, CATEGORY_LABELS, SORTED_CATEGORIES, getVehicles } from "@/lib/types";
+import { ExpenseCategory, CATEGORY_LABELS, MANUAL_EXPENSE_CATEGORIES } from "@/lib/types";
 import { saveExpense } from "@/lib/store";
 import { toast } from "sonner";
+import { useVehicles } from "@/hooks/use-vehicles";
+import { getTodayInTimeZone } from "@/lib/date-utils";
 
 interface Props { open: boolean; onClose: () => void; onSaved: () => void; }
 
 export function NewExpenseModal({ open, onClose, onSaved }: Props) {
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const { vehicles } = useVehicles();
+  const [date, setDate] = useState(getTodayInTimeZone());
   const [category, setCategory] = useState<ExpenseCategory>("manutencao");
   const [description, setDescription] = useState("");
   const [vehicle, setVehicle] = useState("Geral");
@@ -25,6 +28,7 @@ export function NewExpenseModal({ open, onClose, onSaved }: Props) {
     if (isNaN(numAmount) || numAmount <= 0) { toast.error("Informe um valor válido."); return; }
     await saveExpense({ date, category, description, vehicle, amount: numAmount, status });
     toast(`Gasto registrado: R$ ${numAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} (${CATEGORY_LABELS[category]})`);
+    setDate(getTodayInTimeZone());
     setDescription(""); setAmount(""); onSaved(); onClose();
   };
 
@@ -58,14 +62,14 @@ export function NewExpenseModal({ open, onClose, onSaved }: Props) {
               <div><Label className="text-xs font-semibold">Categoria</Label>
                 <Select value={category} onValueChange={(v) => setCategory(v as ExpenseCategory)}>
                   <SelectTrigger className="rounded-lg"><SelectValue /></SelectTrigger>
-                  <SelectContent>{SORTED_CATEGORIES.map(([key, label]) => (<SelectItem key={key} value={key}>{label}</SelectItem>))}</SelectContent>
+                  <SelectContent>{MANUAL_EXPENSE_CATEGORIES.map(([key, label]) => (<SelectItem key={key} value={key}>{label}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
               <div><Label className="text-xs font-semibold">Descrição</Label><Input placeholder="Ex: Troca de pneus dianteiros" value={description} onChange={(e) => setDescription(e.target.value)} className="rounded-lg" /></div>
               <div><Label className="text-xs font-semibold">Veículo</Label>
                 <Select value={vehicle} onValueChange={setVehicle}>
                   <SelectTrigger className="rounded-lg"><SelectValue /></SelectTrigger>
-                  <SelectContent>{getVehicles().map((v) => (<SelectItem key={v} value={v}>{v}</SelectItem>))}</SelectContent>
+                  <SelectContent>{vehicles.map((v) => (<SelectItem key={v.id} value={v.id}>{v.displayName}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
               <div><Label className="text-xs font-semibold">Valor (R$)</Label><Input placeholder="0,00" value={amount} onChange={(e) => setAmount(e.target.value)} className="tabular-nums rounded-lg" /></div>

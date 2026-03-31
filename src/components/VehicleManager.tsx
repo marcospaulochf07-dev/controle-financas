@@ -3,26 +3,50 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Pencil, Check, X, Truck, Plus, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { getVehicleNames, setVehicleName } from "@/lib/store";
-import { getVehicles, addVehicle, removeVehicle } from "@/lib/types";
+import { deactivateVehicleAsync, saveVehicleAsync, updateVehicleDisplayNameAsync } from "@/lib/store";
 import { toast } from "sonner";
+import { useVehicles } from "@/hooks/use-vehicles";
 
 interface Props { onUpdated: () => void; }
 
 export function VehicleManager({ onUpdated }: Props) {
-  const [vehicles, setVehicles] = useState(getVehicles);
-  const names = getVehicleNames();
+  const { vehicles, refresh } = useVehicles();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [adding, setAdding] = useState(false);
   const [newVehicle, setNewVehicle] = useState("");
 
-  const refreshVehicles = () => setVehicles(getVehicles());
+  const startEdit = (vehicleId: string, currentName: string) => {
+    setEditingId(vehicleId);
+    setEditValue(currentName);
+  };
 
-  const startEdit = (vehicleId: string) => { setEditingId(vehicleId); setEditValue(names[vehicleId] || vehicleId); };
-  const save = () => { if (editingId && editValue.trim()) { setVehicleName(editingId, editValue.trim()); onUpdated(); } setEditingId(null); };
-  const handleAdd = () => { if (!newVehicle.trim()) return; addVehicle(newVehicle.trim()); toast.success("Veículo adicionado!"); setNewVehicle(""); setAdding(false); refreshVehicles(); onUpdated(); };
-  const handleRemove = (v: string) => { removeVehicle(v); toast("Veículo removido."); refreshVehicles(); onUpdated(); };
+  const save = async () => {
+    if (editingId && editValue.trim()) {
+      await updateVehicleDisplayNameAsync(editingId, editValue.trim());
+      await refresh();
+      onUpdated();
+    }
+
+    setEditingId(null);
+  };
+
+  const handleAdd = async () => {
+    if (!newVehicle.trim()) return;
+    await saveVehicleAsync(newVehicle.trim(), newVehicle.trim());
+    toast.success("Veículo adicionado!");
+    setNewVehicle("");
+    setAdding(false);
+    await refresh();
+    onUpdated();
+  };
+
+  const handleRemove = async (vehicleId: string) => {
+    await deactivateVehicleAsync(vehicleId);
+    toast("Veículo removido.");
+    await refresh();
+    onUpdated();
+  };
 
   return (
     <motion.div
@@ -50,15 +74,15 @@ export function VehicleManager({ onUpdated }: Props) {
       </AnimatePresence>
 
       <div className="space-y-2">
-        {vehicles.map((v, i) => (
+        {vehicles.map((vehicle, i) => (
           <motion.div
-            key={v}
+            key={vehicle.id}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3, delay: i * 0.05 }}
             className="group flex items-center justify-between rounded-xl bg-accent/30 px-3 py-2.5 transition-colors hover:bg-accent/50"
           >
-            {editingId === v ? (
+            {editingId === vehicle.id ? (
               <div className="flex flex-1 items-center gap-2">
                 <Input value={editValue} onChange={(e) => setEditValue(e.target.value)} className="h-7 text-sm rounded-lg" autoFocus onKeyDown={(e) => e.key === "Enter" && save()} />
                 <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={save}><Check className="h-3.5 w-3.5" /></Button>
@@ -70,12 +94,12 @@ export function VehicleManager({ onUpdated }: Props) {
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
                     <Truck className="h-3.5 w-3.5 text-primary" />
                   </div>
-                  <span className="text-sm font-medium">{names[v] || v}</span>
-                  {names[v] && names[v] !== v && <span className="text-xs text-muted-foreground">({v})</span>}
+                  <span className="text-sm font-medium">{vehicle.displayName}</span>
+                  {vehicle.displayName !== vehicle.id && <span className="text-xs text-muted-foreground">({vehicle.id})</span>}
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => startEdit(v)} className="rounded-lg p-1 text-muted-foreground hover:text-foreground transition-colors"><Pencil className="h-3 w-3" /></button>
-                  <button onClick={() => handleRemove(v)} className="rounded-lg p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-loss transition-colors"><Trash2 className="h-3 w-3" /></button>
+                  <button onClick={() => startEdit(vehicle.id, vehicle.displayName)} className="rounded-lg p-1 text-muted-foreground hover:text-foreground transition-colors"><Pencil className="h-3 w-3" /></button>
+                  <button onClick={() => void handleRemove(vehicle.id)} className="rounded-lg p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-loss transition-colors"><Trash2 className="h-3 w-3" /></button>
                 </div>
               </>
             )}

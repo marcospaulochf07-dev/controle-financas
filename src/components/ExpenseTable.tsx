@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Expense, CATEGORY_LABELS } from "@/lib/types";
-import { getVehicleName } from "@/lib/store";
 import { Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   AlertDialog,
@@ -21,22 +20,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { compareDateStringsDesc, formatDateForDisplay } from "@/lib/date-utils";
 
 interface ExpenseTableProps {
   expenses: Expense[];
   onDelete: (id: string) => void;
+  vehicleNameMap: Record<string, string>;
 }
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
-export function ExpenseTable({ expenses, onDelete }: ExpenseTableProps) {
+export function ExpenseTable({ expenses, onDelete, vehicleNameMap }: ExpenseTableProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
   // Sort by date descending (newest first)
   const sorted = useMemo(
-    () => [...expenses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    () => [...expenses].sort((a, b) => compareDateStringsDesc(a.date, b.date)),
     [expenses]
   );
 
@@ -101,7 +102,7 @@ export function ExpenseTable({ expenses, onDelete }: ExpenseTableProps) {
                 className="group border-b border-border/30 transition-colors duration-200 hover:bg-accent/40"
               >
                 <td className="py-3.5 pr-4 tabular-nums text-muted-foreground">
-                  {new Date(expense.date).toLocaleDateString("pt-BR")}
+                  {formatDateForDisplay(expense.date)}
                 </td>
                 <td className="py-3.5 pr-4 font-medium">
                   {CATEGORY_LABELS[expense.category]}
@@ -109,7 +110,7 @@ export function ExpenseTable({ expenses, onDelete }: ExpenseTableProps) {
                 <td className="py-3.5 pr-4 text-muted-foreground max-w-[200px] truncate" title={expense.description}>
                   {expense.description}
                 </td>
-                <td className="py-3.5 pr-4">{getVehicleName(expense.vehicle)}</td>
+                <td className="py-3.5 pr-4">{vehicleNameMap[expense.vehicle] || expense.vehicle}</td>
                 <td className="py-3.5 pr-4 text-right tabular-nums font-semibold">
                   {expense.amount.toLocaleString("pt-BR", {
                     minimumFractionDigits: 2,

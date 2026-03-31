@@ -3,31 +3,31 @@ import { motion } from "framer-motion";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { getMonthlyRevenue } from "@/lib/store";
-import { Expense } from "@/lib/types";
+import { DriverDaily, Expense, MonthlyRevenue } from "@/lib/types";
+import { getMonthCostTotal } from "@/lib/driver-daily-expenses";
 
 const MONTH_LABELS = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
   "Jul", "Ago", "Set", "Out", "Nov", "Dez",
 ];
 
-interface Props { allExpenses: Expense[]; year: number; }
+interface Props {
+  allExpenses: Expense[];
+  allDriverDailies: DriverDaily[];
+  revenues: MonthlyRevenue[];
+  year: number;
+}
 
-export function RevenueChart({ allExpenses, year }: Props) {
+export function RevenueChart({ allExpenses, allDriverDailies, revenues, year }: Props) {
   const data = useMemo(() => {
-    const expenses = allExpenses;
+    const revenueMap = new Map(revenues.map((item) => [item.monthKey, item.amount]));
     return MONTH_LABELS.map((label, i) => {
       const key = `${year}-${String(i + 1).padStart(2, "0")}`;
-      const revenue = getMonthlyRevenue(key);
-      const cost = expenses
-        .filter((e) => {
-          const d = new Date(e.date);
-          return d.getFullYear() === year && d.getMonth() === i;
-        })
-        .reduce((s, e) => s + e.amount, 0);
+      const revenue = revenueMap.get(key) ?? 20000;
+      const cost = getMonthCostTotal(allExpenses, allDriverDailies, year, i);
       return { name: label, receita: revenue, custo: cost };
     });
-  }, [year]);
+  }, [allDriverDailies, allExpenses, revenues, year]);
 
   const formatCurrency = (v: number) =>
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });

@@ -2,15 +2,21 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
-import { getMonthlyRevenue } from "@/lib/store";
-import { CATEGORY_LABELS, ExpenseCategory, Expense } from "@/lib/types";
+import { CATEGORY_LABELS, DriverDaily, ExpenseCategory, Expense, MonthlyRevenue } from "@/lib/types";
+import { getMonthCostByCategory, getMonthCostTotal } from "@/lib/driver-daily-expenses";
 
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-interface Props { allExpenses: Expense[]; year: number; month: number; }
+interface Props {
+  allExpenses: Expense[];
+  allDriverDailies: DriverDaily[];
+  revenues: MonthlyRevenue[];
+  year: number;
+  month: number;
+}
 
 function getMonthKey(y: number, m: number) {
   return `${y}-${String(m + 1).padStart(2, "0")}`;
@@ -45,12 +51,25 @@ function DiffBadge({ current, previous }: { current: number; previous: number })
 
 const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TooltipEntry {
+  dataKey: string;
+  color: string;
+  name: string;
+  value: number;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (!active || !payload) return null;
   return (
     <div className="rounded-lg border bg-card p-3 shadow-lg text-sm">
       <p className="font-semibold mb-1">{label}</p>
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <p key={p.dataKey} style={{ color: p.color }}>
           {p.name}: {fmt(p.value)}
         </p>
@@ -59,18 +78,17 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-export function MonthComparison({ allExpenses, year, month }: Props) {
+export function MonthComparison({ allExpenses, allDriverDailies, revenues, year, month }: Props) {
   const prev = getPrev(year, month);
+  const revenueMap = useMemo(() => new Map(revenues.map((item) => [item.monthKey, item.amount])), [revenues]);
 
   // 6-month trend data
   const trendData = useMemo(() => {
     const months = getMonthsBack(year, month, 6);
     return months.map(({ y, m }) => {
       const key = getMonthKey(y, m);
-      const revenue = getMonthlyRevenue(key);
-      const expenses = allExpenses
-        .filter((e) => { const d = new Date(e.date); return d.getFullYear() === y && d.getMonth() === m; })
-        .reduce((s, e) => s + e.amount, 0);
+      const revenue = revenueMap.get(key) ?? 20000;
+      const expenses = getMonthCostTotal(allExpenses, allDriverDailies, y, m);
       return {
         name: `${MONTHS[m].substring(0, 3)}/${y.toString().slice(-2)}`,
         Receita: revenue,
@@ -78,33 +96,36 @@ export function MonthComparison({ allExpenses, year, month }: Props) {
         Lucro: revenue - expenses,
       };
     });
-  }, [allExpenses, year, month]);
+  }, [allDriverDailies, allExpenses, month, revenueMap, year]);
 
   // Category comparison current vs previous
   const categoryData = useMemo(() => {
-    const curExpenses = allExpenses.filter((e) => { const d = new Date(e.date); return d.getFullYear() === year && d.getMonth() === month; });
-    const prevExpenses = allExpenses.filter((e) => { const d = new Date(e.date); return d.getFullYear() === prev.y && d.getMonth() === prev.m; });
-    const categories = new Set<ExpenseCategory>();
-    [...curExpenses, ...prevExpenses].forEach((e) => categories.add(e.category));
+    const currentByCategory = getMonthCostByCategory(allExpenses, allDriverDailies, year, month);
+    const previousByCategory = getMonthCostByCategory(allExpenses, allDriverDailies, prev.y, prev.m);
+    const categories = new Set<ExpenseCategory>([
+      ...Object.keys(currentByCategory) as ExpenseCategory[],
+      ...Object.keys(previousByCategory) as ExpenseCategory[],
+    ]);
+
     return Array.from(categories)
       .map((cat) => ({
         name: CATEGORY_LABELS[cat],
-        "Mês Atual": curExpenses.filter((e) => e.category === cat).reduce((s, e) => s + e.amount, 0),
-        "Mês Anterior": prevExpenses.filter((e) => e.category === cat).reduce((s, e) => s + e.amount, 0),
+        "Mês Atual": currentByCategory[cat] || 0,
+        "Mês Anterior": previousByCategory[cat] || 0,
       }))
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }, [allExpenses, year, month, prev.y, prev.m]);
+  }, [allDriverDailies, allExpenses, month, prev.m, prev.y, year]);
 
   // Summary comparison
   const comparison = useMemo(() => {
     const curKey = getMonthKey(year, month);
     const prevKey = getMonthKey(prev.y, prev.m);
-    const curRevenue = getMonthlyRevenue(curKey);
-    const prevRevenue = getMonthlyRevenue(prevKey);
-    const curTotal = allExpenses.filter((e) => { const d = new Date(e.date); return d.getFullYear() === year && d.getMonth() === month; }).reduce((s, e) => s + e.amount, 0);
-    const prevTotal = allExpenses.filter((e) => { const d = new Date(e.date); return d.getFullYear() === prev.y && d.getMonth() === prev.m; }).reduce((s, e) => s + e.amount, 0);
+    const curRevenue = revenueMap.get(curKey) ?? 20000;
+    const prevRevenue = revenueMap.get(prevKey) ?? 20000;
+    const curTotal = getMonthCostTotal(allExpenses, allDriverDailies, year, month);
+    const prevTotal = getMonthCostTotal(allExpenses, allDriverDailies, prev.y, prev.m);
     return { curRevenue, prevRevenue, curTotal, prevTotal };
-  }, [allExpenses, year, month, prev.y, prev.m]);
+  }, [allDriverDailies, allExpenses, month, prev.m, prev.y, revenueMap, year]);
 
   const prevLabel = `${MONTHS[prev.m].substring(0, 3)}/${prev.y}`;
   const curLabel = `${MONTHS[month].substring(0, 3)}/${year}`;

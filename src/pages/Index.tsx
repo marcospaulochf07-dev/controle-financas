@@ -1,9 +1,8 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, ChevronLeft, ChevronRight, BarChart3, FileText, Users, GitCompare, CheckSquare } from "lucide-react";
+import { BarChart3, CheckSquare, ChevronLeft, ChevronRight, FileText, GitCompare, Plus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
 import { MetricCard } from "@/components/MetricCard";
 import { ExpenseTable } from "@/components/ExpenseTable";
 import { NewExpenseModal } from "@/components/NewExpenseModal";
@@ -17,13 +16,26 @@ import { MonthComparison } from "@/components/MonthComparison";
 import { VehicleManager } from "@/components/VehicleManager";
 import { DriverDailies } from "@/components/DriverDailies";
 import { RecurringReminders } from "@/components/RecurringReminders";
-import { deleteExpense, getMonthlyRevenue, getVehicleName, updateExpenseStatus } from "@/lib/store";
+import { deleteExpense, updateDriverDailyPaidRoutesAsync, updateExpenseStatus } from "@/lib/store";
 import { useDriverDailies } from "@/hooks/use-driver-dailies";
 import { useExpenses } from "@/hooks/use-expenses";
-import { getVehicles } from "@/lib/types";
-import { toast } from "sonner";
+import { useVehicles } from "@/hooks/use-vehicles";
+import { useMonthlyRevenues } from "@/hooks/use-monthly-revenues";
+import { useAppBootstrap } from "@/hooks/use-app-bootstrap";
 import logo from "@/assets/logo.png";
-import { buildConsolidatedDriverExpenses, isDriverDailyExpense, syncDriverDailyExpenses } from "@/lib/driver-daily-expenses";
+import { toast } from "sonner";
+import {
+  buildDriverDailyRows,
+  buildMonthlyFinancialEntries,
+  buildPaidFinancialEntries,
+  buildPendingFinancialEntries,
+  getMonthCostTotal,
+  getMonthDriverDailyPendingTotal,
+  getMonthDriverDailyTotal,
+  getNonDailyExpensesForMonth,
+} from "@/lib/driver-daily-expenses";
+import { FinancialEntry } from "@/lib/types";
+import { formatMonthKey, getCurrentYearMonth } from "@/lib/date-utils";
 
 const MONTHS = [
   "Janeiro",
@@ -40,10 +52,6 @@ const MONTHS = [
   "Dezembro",
 ];
 
-function getMonthKey(year: number, month: number) {
-  return `${year}-${String(month + 1).padStart(2, "0")}`;
-}
-
 const tabAnimVariants = {
   hidden: { opacity: 0, y: 12 },
   visible: {
@@ -54,121 +62,144 @@ const tabAnimVariants = {
   exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
 };
 
+const now = getCurrentYearMonth();
+
 const Index = () => {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
+  const [year, setYear] = useState(now.year);
+  const [month, setMonth] = useState(now.monthIndex);
   const [vehicleFilter, setVehicleFilter] = useState("Todos");
   const [modalOpen, setModalOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState("lancamentos");
 
   const { expenses: allExpenses, refresh: refreshExpenses } = useExpenses();
   const { dailies: allDriverDailies, refresh: refreshDailies } = useDriverDailies();
+  const { vehicles, refresh: refreshVehicles } = useVehicles();
+  const { revenues, refresh: refreshRevenues } = useMonthlyRevenues();
 
-  const refresh = useCallback(() => {
-    setRefreshKey((k) => k + 1);
-    refreshExpenses();
-    refreshDailies();
-  }, [refreshExpenses, refreshDailies]);
+  const refresh = useCallback(async () => {
+    await Promise.all([refreshExpenses(), refreshDailies(), refreshVehicles(), refreshRevenues()]);
+  }, [refreshDailies, refreshExpenses, refreshRevenues, refreshVehicles]);
 
-  const monthKey = getMonthKey(year, month);
-  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
-  const isFutureMonth = year > now.getFullYear() || (year === now.getFullYear() && month > now.getMonth());
+  useAppBootstrap(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
 
-  const vehicles = useMemo(() => {
-    void refreshKey;
-    return getVehicles();
-  }, [refreshKey]);
+  const monthKey = formatMonthKey(year, month);
+  const vehicleNameMap = useMemo(
+    () => Object.fromEntries(vehicles.map((vehicle) => [vehicle.id, vehicle.displayName])),
+    [vehicles],
+  );
+  const revenueMap = useMemo(
+    () => Object.fromEntries(revenues.map((item) => [item.monthKey, item.amount])),
+    [revenues],
+  );
 
-  // All expenses for this month (diárias sempre consolidadas pela soma real dos registros)
-  const allMonthExpenses = useMemo(() => {
-    const monthExpenses = allExpenses.filter((e) => {
-      const d = new Date(e.date);
-      return d.getFullYear() === year && d.getMonth() === month;
-    });
+  const isFutureMonth = year > now.year || (year === now.year && month > now.monthIndex);
 
-    const nonDriverDailyExpenses = monthExpenses.filter((expense) => !isDriverDailyExpense(expense));
-    const consolidatedDriverExpenses = buildConsolidatedDriverExpenses(allExpenses, allDriverDailies, year, month);
+  const monthExpenses = useMemo(() => getNonDailyExpensesForMonth(allExpenses, year, month), [allExpenses, year, month]);
+  const filteredLaunchExpenses = useMemo(
+    () => monthExpenses.filter((expense) => vehicleFilter === "Todos" || expense.vehicle === vehicleFilter),
+    [monthExpenses, vehicleFilter],
+  );
 
-    return [...nonDriverDailyExpenses, ...consolidatedDriverExpenses];
-  }, [allExpenses, allDriverDailies, year, month]);
+  const monthFinancialEntries = useMemo(
+    () => buildMonthlyFinancialEntries(allExpenses, allDriverDailies, year, month, vehicleFilter),
+    [allDriverDailies, allExpenses, month, vehicleFilter, year],
+  );
 
-  // Filtered for lançamentos table (excludes diarias, applies vehicle filter)
-  const filtered = useMemo(() => {
-    return allMonthExpenses.filter((e) => {
-      const matchVehicle = vehicleFilter === "Todos" || e.vehicle === vehicleFilter;
-      return matchVehicle;
-    });
-  }, [allMonthExpenses, vehicleFilter]);
+  const pendingEntries = useMemo(
+    () => buildPendingFinancialEntries(allExpenses, allDriverDailies, year, month),
+    [allDriverDailies, allExpenses, month, year],
+  );
 
-  const totalCost = allMonthExpenses.reduce((s, e) => s + e.amount, 0);
-  const revenue = getMonthlyRevenue(monthKey);
+  const paidEntries = useMemo(
+    () => buildPaidFinancialEntries(allExpenses, allDriverDailies, year, month),
+    [allDriverDailies, allExpenses, month, year],
+  );
+
+  const totalCost = useMemo(() => getMonthCostTotal(allExpenses, allDriverDailies, year, month), [allDriverDailies, allExpenses, month, year]);
+  const revenue = revenueMap[monthKey] ?? 20000;
   const margin = revenue - totalCost;
 
-  const syncingRef = React.useRef(false);
-  useEffect(() => {
-    if (syncingRef.current) return;
-    let cancelled = false;
-
-    const syncDailies = async () => {
-      syncingRef.current = true;
-      const changed = await syncDriverDailyExpenses(allExpenses, allDriverDailies, year, month);
-      syncingRef.current = false;
-      if (changed && !cancelled) {
-        refreshExpenses();
-      }
-    };
-
-    void syncDailies();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [allDriverDailies, year, month]); // eslint-disable-line react-hooks/exhaustive-deps
+  const driverDailiesTotal = useMemo(
+    () => getMonthDriverDailyTotal(allDriverDailies, year, month),
+    [allDriverDailies, month, year],
+  );
+  const driverDailiesPendingTotal = useMemo(
+    () => getMonthDriverDailyPendingTotal(allDriverDailies, year, month),
+    [allDriverDailies, month, year],
+  );
 
   const prevMonth = () => {
     if (month === 0) {
       setMonth(11);
-      setYear(year - 1);
-    } else setMonth(month - 1);
+      setYear((value) => value - 1);
+      return;
+    }
+
+    setMonth((value) => value - 1);
   };
+
   const nextMonth = () => {
     if (month === 11) {
       setMonth(0);
-      setYear(year + 1);
-    } else setMonth(month + 1);
+      setYear((value) => value + 1);
+      return;
+    }
+
+    setMonth((value) => value + 1);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDeleteExpense = async (id: string) => {
     await deleteExpense(id);
-    refresh();
+    await refresh();
   };
 
-  const handleMarkPaid = async (id: string) => {
-    await updateExpenseStatus(id, "pago");
-    toast.success("Pagamento concluído!");
-    refresh();
+  const handleMarkPaid = async (entry: FinancialEntry) => {
+    if (entry.kind === "expense") {
+      await updateExpenseStatus(entry.id, "pago");
+      toast.success("Pagamento concluído!");
+      await refresh();
+      return;
+    }
+
+    const rows = buildDriverDailyRows(allDriverDailies, year, month)
+      .filter((row) => row.driverName === entry.driverName)
+      .filter((row) => row.unpaidRoutes > 0)
+      .sort((left, right) => left.date.localeCompare(right.date) || (left.createdAt || "").localeCompare(right.createdAt || ""));
+
+    for (const row of rows) {
+      await updateDriverDailyPaidRoutesAsync(row.id, row.routes);
+    }
+
+    toast.success(`Todas as rotas pendentes de ${entry.driverName} foram marcadas como pagas.`);
+    await refresh();
   };
 
-  const handleMarkPending = async (id: string) => {
-    await updateExpenseStatus(id, "pendente");
-    toast.success("Voltou para pendente.");
-    refresh();
-  };
+  const handleMarkPending = async (entry: FinancialEntry) => {
+    if (entry.kind === "expense") {
+      await updateExpenseStatus(entry.id, "pendente");
+      toast.success("Voltou para pendente.");
+      await refresh();
+      return;
+    }
 
-  const driverDailiesTotal = useMemo(() => {
-    return allDriverDailies
-      .filter((d) => {
-        const dt = new Date(d.date);
-        return dt.getFullYear() === year && dt.getMonth() === month;
-      })
-      .reduce((s, d) => s + d.routes * d.valuePerRoute, 0);
-  }, [allDriverDailies, year, month]);
+    const rows = buildDriverDailyRows(allDriverDailies, year, month)
+      .filter((row) => row.driverName === entry.driverName)
+      .filter((row) => row.paidRoutes > 0);
+
+    for (const row of rows) {
+      await updateDriverDailyPaidRoutesAsync(row.id, 0);
+    }
+
+    toast.success(`As rotas pagas de ${entry.driverName} voltaram para pendente.`);
+    await refresh();
+  };
 
   return (
     <div className="min-h-screen bg-background notranslate" translate="no">
-      {/* Header */}
       <header className="sticky top-0 z-30 border-b border-border/50 gradient-header glass" role="banner">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <motion.div
@@ -182,14 +213,14 @@ const Index = () => {
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight">Gestor de Frota</h1>
-              <p className="text-[11px] font-medium text-muted-foreground tracking-wide">FREITAS VIDAL SERVIÇOS LTDA</p>
+              <p className="text-[11px] font-medium tracking-wide text-muted-foreground">FREITAS VIDAL SERVIÇOS LTDA</p>
             </div>
           </motion.div>
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
             <Button
               onClick={() => setModalOpen(true)}
               size="sm"
-              className="gap-1.5 rounded-xl font-semibold shadow-md hover:shadow-lg transition-shadow focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="gap-1.5 rounded-xl font-semibold shadow-md transition-shadow hover:shadow-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label="Adicionar novo lançamento"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -200,8 +231,7 @@ const Index = () => {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6" role="main">
-        {/* Filters */}
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6" role="main">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -213,7 +243,7 @@ const Index = () => {
           <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-card px-2 py-1 shadow-card">
             <button
               onClick={prevMonth}
-              className="rounded-lg p-1.5 hover:bg-accent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              className="rounded-lg p-1.5 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               aria-label="Mês anterior"
             >
               <ChevronLeft className="h-4 w-4 text-muted-foreground" />
@@ -223,59 +253,41 @@ const Index = () => {
             </span>
             <button
               onClick={nextMonth}
-              className="rounded-lg p-1.5 hover:bg-accent transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              className="rounded-lg p-1.5 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               aria-label="Próximo mês"
             >
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
           <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
-            <SelectTrigger
-              className="h-9 w-40 rounded-xl border-border/50 text-xs font-medium shadow-card"
-              aria-label="Filtrar por veículo"
-            >
+            <SelectTrigger className="h-9 w-48 rounded-xl border-border/50 text-xs font-medium shadow-card" aria-label="Filtrar por veículo">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="Todos">Todos os veículos</SelectItem>
-              {vehicles.map((v) => (
-                <SelectItem key={v} value={v}>
-                  {getVehicleName(v)}
+              {vehicles.map((vehicle) => (
+                <SelectItem key={vehicle.id} value={vehicle.id}>
+                  {vehicle.displayName}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </motion.div>
 
-        {/* Metrics */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" role="region" aria-label="Métricas financeiras">
           <div>
             <MetricCard label="Receita Bruta (Usina)" value={revenue} delay={0.1} />
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="mt-2 px-1"
-            >
-              <RevenueEditor month={monthKey} currentValue={revenue} onUpdated={refresh} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-2 px-1">
+              <RevenueEditor month={monthKey} currentValue={revenue} onUpdated={() => void refresh()} />
             </motion.div>
           </div>
           <MetricCard label="Custo Operacional Total" value={totalCost} delay={0.2} />
           <MetricCard label="Margem Líquida" value={margin} type={margin >= 0 ? "profit" : "loss"} delay={0.3} />
         </div>
 
-        {/* Tabs */}
         <div className="w-full">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
-          >
-            <div
-              className="w-full flex justify-start flex-wrap gap-1.5 p-0 mb-4"
-              role="tablist"
-              aria-label="Seções do painel"
-            >
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }}>
+            <div className="mb-4 flex w-full flex-wrap justify-start gap-1.5 p-0" role="tablist" aria-label="Seções do painel">
               {[
                 { value: "lancamentos", label: "Lançamentos", icon: FileText },
                 { value: "diarias", label: "Diárias", icon: Users },
@@ -308,25 +320,32 @@ const Index = () => {
                   <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                     Lançamentos — {MONTHS[month]} {year}
                   </h2>
-                  <ExpenseTable expenses={filtered} onDelete={handleDelete} />
+                  <ExpenseTable expenses={filteredLaunchExpenses} onDelete={handleDeleteExpense} vehicleNameMap={vehicleNameMap} />
                 </div>
                 <div className="space-y-6">
-                  <CostBreakdown expenses={filtered} />
-                  <VehicleManager onUpdated={refresh} />
+                  <CostBreakdown expenses={monthFinancialEntries} />
+                  <VehicleManager onUpdated={() => void refresh()} />
                 </div>
               </div>
 
-              <div
-                className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5"
-                role="region"
-                aria-label="Lembretes de pagamento"
-                aria-live="polite"
-              >
+              <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5" role="region" aria-label="Lembretes de pagamento" aria-live="polite">
                 <div className="lg:col-span-3">
-                  <PaymentReminders expenses={allMonthExpenses} onMarkPaid={handleMarkPaid} isFutureMonth={isFutureMonth} />
+                  <PaymentReminders
+                    expenses={pendingEntries}
+                    onMarkPaid={handleMarkPaid}
+                    isFutureMonth={isFutureMonth}
+                    vehicleNameMap={vehicleNameMap}
+                  />
                 </div>
                 <div className="lg:col-span-2">
-                  <RecurringReminders onUpdated={refresh} driverDailiesTotal={driverDailiesTotal} selectedYear={year} selectedMonth={month} />
+                  <RecurringReminders
+                    expenses={allExpenses}
+                    onUpdated={() => void refresh()}
+                    driverDailiesTotal={driverDailiesTotal}
+                    driverDailiesPendingTotal={driverDailiesPendingTotal}
+                    selectedYear={year}
+                    selectedMonth={month}
+                  />
                 </div>
               </div>
             </motion.div>
@@ -334,34 +353,34 @@ const Index = () => {
 
           {activeTab === "diarias" && (
             <motion.div key="diarias" variants={tabAnimVariants} initial="hidden" animate="visible">
-              <DriverDailies year={year} month={month} expenses={allExpenses} onUpdated={refresh} />
+              <DriverDailies year={year} month={month} onUpdated={() => void refresh()} vehicleNameMap={vehicleNameMap} />
             </motion.div>
           )}
 
           {activeTab === "pagos" && (
             <motion.div key="pagos" variants={tabAnimVariants} initial="hidden" animate="visible">
-              <PaidExpenses expenses={allMonthExpenses} onMarkPending={handleMarkPending} />
+              <PaidExpenses expenses={paidEntries} onMarkPending={handleMarkPending} vehicleNameMap={vehicleNameMap} />
             </motion.div>
           )}
 
           {activeTab === "graficos" && (
             <motion.div key="graficos" variants={tabAnimVariants} initial="hidden" animate="visible">
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <RevenueChart allExpenses={allExpenses} year={year} />
-                <CostPieChart expenses={filtered} />
+                <RevenueChart allExpenses={allExpenses} allDriverDailies={allDriverDailies} revenues={revenues} year={year} />
+                <CostPieChart expenses={monthFinancialEntries} />
               </div>
             </motion.div>
           )}
 
           {activeTab === "comparativo" && (
             <motion.div key="comparativo" variants={tabAnimVariants} initial="hidden" animate="visible">
-              <MonthComparison allExpenses={allExpenses} year={year} month={month} />
+              <MonthComparison allExpenses={allExpenses} allDriverDailies={allDriverDailies} revenues={revenues} year={year} month={month} />
             </motion.div>
           )}
         </div>
       </main>
 
-      <NewExpenseModal open={modalOpen} onClose={() => setModalOpen(false)} onSaved={refresh} />
+      <NewExpenseModal open={modalOpen} onClose={() => setModalOpen(false)} onSaved={() => void refresh()} />
     </div>
   );
 };

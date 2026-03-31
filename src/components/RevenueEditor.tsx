@@ -14,10 +14,10 @@ export function RevenueEditor({ month, currentValue, onUpdated }: Props) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(currentValue.toString());
 
-  const save = () => {
+  const save = async () => {
     const num = parseFloat(value.replace(",", "."));
     if (!isNaN(num)) {
-      setMonthlyRevenue(month, num);
+      await setMonthlyRevenue(month, num);
       onUpdated();
     }
     setEditing(false);
@@ -42,9 +42,9 @@ export function RevenueEditor({ month, currentValue, onUpdated }: Props) {
         onChange={(e) => setValue(e.target.value)}
         className="h-7 w-32 text-xs tabular-nums"
         autoFocus
-        onKeyDown={(e) => e.key === "Enter" && save()}
+        onKeyDown={(e) => e.key === "Enter" && void save()}
       />
-      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={save}>
+      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => void save()}>
         <Check className="h-3.5 w-3.5" />
       </Button>
     </div>

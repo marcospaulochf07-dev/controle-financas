@@ -1,277 +1,188 @@
-import { useState, useMemo, useEffect, useRef } from "react";
-import { Bell, Plus, Trash2, CheckCircle2, RotateCcw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Bell, CheckCircle2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RecurringReminder, ExpenseCategory, SORTED_CATEGORIES, CATEGORY_LABELS } from "@/lib/types";
-import { getRecurringReminders, saveRecurringReminder, deleteRecurringReminder, toggleRecurringReminderPaid, saveExpense } from "@/lib/store";
+import { CATEGORY_LABELS, Expense, ExpenseCategory, RecurringTemplate, SORTED_CATEGORIES } from "@/lib/types";
+import {
+  deactivateRecurringTemplateAsync,
+  ensureRecurringExpensesForMonth,
+  saveRecurringTemplateAsync,
+  saveExpense,
+  updateExpenseStatus,
+} from "@/lib/store";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-
-const DEFAULT_RECURRING: Omit<RecurringReminder, "id">[] = [
-  { label: "Contador", dayOfMonth: 10, amount: 810, category: "contador" },
-  { label: "Imposto da Nota (6%)", dayOfMonth: 15, amount: 1250, category: "imposto" },
-  { label: "Parcela Financiamento", dayOfMonth: 5, amount: 4500, category: "financiamento" },
-  { label: "Seguro", dayOfMonth: 10, amount: 400, category: "seguro" },
-  { label: "Férias e 13º", dayOfMonth: 5, amount: 400, category: "salario" },
-];
+import { useRecurringTemplates } from "@/hooks/use-recurring-templates";
+import { createDateString } from "@/lib/date-utils";
 
 interface Props {
+  expenses: Expense[];
   onUpdated: () => void;
   driverDailiesTotal?: number;
-  selectedYear?: number;
-  selectedMonth?: number;
+  driverDailiesPendingTotal?: number;
+  selectedYear: number;
+  selectedMonth: number;
 }
 
-function getMonthKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+interface ReminderRow {
+  id: string;
+  label: string;
+  dayOfMonth: number;
+  amount: number;
+  category: ExpenseCategory;
+  status: "pago" | "pendente";
+  readOnly: boolean;
+  expenseId?: string;
 }
 
-function seedDefaults() {
-  const existing = getRecurringReminders();
-  if (existing.length === 0) {
-    for (const item of DEFAULT_RECURRING) {
-      saveRecurringReminder(item);
+function buildReminderRows(
+  templates: RecurringTemplate[],
+  expenses: Expense[],
+  selectedYear: number,
+  selectedMonth: number,
+  driverDailiesTotal: number,
+  driverDailiesPendingTotal: number,
+): ReminderRow[] {
+  const monthKey = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+  const selectedMonthExpenses = expenses.filter((expense) => expense.source === "recorrente-auto" && expense.date.startsWith(monthKey));
+  const byDescription = new Map(selectedMonthExpenses.map((expense) => [expense.description, expense]));
+
+  return templates.map((template) => {
+    if (template.category === "diaria") {
+      return {
+        id: template.id,
+        label: template.label,
+        dayOfMonth: template.dayOfMonth,
+        amount: driverDailiesTotal,
+        category: template.category,
+        status: driverDailiesPendingTotal > 0 ? "pendente" : "pago",
+        readOnly: true,
+      };
     }
-    saveRecurringReminder({ label: "Diárias dos Motoristas", dayOfMonth: 30, amount: 0, category: "diaria" });
-  }
+
+    const occurrence = byDescription.get(template.label);
+    return {
+      id: template.id,
+      label: template.label,
+      dayOfMonth: template.dayOfMonth,
+      amount: template.amount,
+      category: template.category,
+      status: occurrence?.status || "pendente",
+      readOnly: false,
+      expenseId: occurrence?.id,
+    };
+  });
 }
 
-// Check and reset paid status at beginning of each month
-function checkMonthlyReset() {
-  const LAST_RESET_KEY = "recurring-last-reset-month";
-  const currentMonth = getMonthKey();
-  const lastReset = localStorage.getItem(LAST_RESET_KEY);
-
-  if (lastReset !== currentMonth) {
-    // New month — reset all paid statuses to unpaid
-    const reminders = getRecurringReminders();
-    for (const r of reminders) {
-      if (r.paid) {
-        toggleRecurringReminderPaid(r.id); // toggle back to unpaid
-      }
-    }
-    localStorage.setItem(LAST_RESET_KEY, currentMonth);
-  }
-}
-
-// Sync recurring reminders as pending expenses in the DB for all months of the current year
-async function syncRecurringToExpenses(reminders: RecurringReminder[]): Promise<boolean> {
-  const now = new Date();
-  const year = now.getFullYear();
-  let created = false;
-
-  for (let month = 0; month < 12; month++) {
-    const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`;
-    const startDate = `${monthStr}-01`;
-    const endDate = month === 11 ? `${year + 1}-01-01` : `${year}-${String(month + 2).padStart(2, "0")}-01`;
-
-    for (const r of reminders) {
-      if (r.amount <= 0) continue;
-      if (r.category === "diaria") continue;
-
-      const { data } = await supabase
-        .from("expenses")
-        .select("id")
-        .eq("source", "recorrente-auto")
-        .eq("description", r.label)
-        .gte("date", startDate)
-        .lt("date", endDate)
-        .limit(1);
-
-      if (data && data.length > 0) continue;
-
-      const day = Math.min(r.dayOfMonth, 28);
-      // Current month and past months: respect paid status; future months: pendente
-      const isPastOrCurrent = month <= now.getMonth();
-      await saveExpense({
-        date: `${monthStr}-${String(day).padStart(2, "0")}`,
-        category: r.category,
-        description: r.label,
-        vehicle: "Geral",
-        amount: r.amount,
-        status: isPastOrCurrent && r.paid ? "pago" : "pendente",
-        source: "recorrente-auto",
-      });
-      created = true;
-    }
-  }
-  return created;
-}
-
-export function RecurringReminders({ onUpdated, driverDailiesTotal = 0, selectedYear, selectedMonth }: Props) {
-  const [refreshKey, setRefreshKey] = useState(0);
+export function RecurringReminders({
+  expenses,
+  onUpdated,
+  driverDailiesTotal = 0,
+  driverDailiesPendingTotal = 0,
+  selectedYear,
+  selectedMonth,
+}: Props) {
+  const { templates, refresh } = useRecurringTemplates();
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState("");
   const [day, setDay] = useState("5");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<ExpenseCategory>("imposto");
-  const syncingRef = useRef(false);
 
   useEffect(() => {
-    seedDefaults();
-    checkMonthlyReset();
-    setRefreshKey((k) => k + 1);
-  }, []);
+    if (templates.length === 0) return;
 
-  // Sync localStorage paid status from Supabase expense status (once on mount)
-  const hasSyncedPaid = useRef(false);
-  useEffect(() => {
-    if (hasSyncedPaid.current) return;
-    hasSyncedPaid.current = true;
+    let cancelled = false;
 
-    async function syncPaidStatus() {
-      const now = new Date();
-      const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-      const startDate = `${monthStr}-01`;
-      const endMonth = now.getMonth() === 11
-        ? `${now.getFullYear() + 1}-01-01`
-        : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, "0")}-01`;
-
-      const localReminders = getRecurringReminders();
-      let changed = false;
-
-      for (const r of localReminders) {
-        if (r.amount <= 0 || r.category === "diaria") continue;
-
-        const { data } = await supabase
-          .from("expenses")
-          .select("id, status")
-          .eq("source", "recorrente-auto")
-          .eq("description", r.label)
-          .gte("date", startDate)
-          .lt("date", endMonth)
-          .limit(1);
-
-        if (data && data.length > 0) {
-          const dbPaid = data[0].status === "pago";
-          if (r.paid !== dbPaid) {
-            toggleRecurringReminderPaid(r.id);
-            changed = true;
-          }
-        }
-      }
-
-      if (changed) setRefreshKey((k) => k + 1);
-    }
-
-    syncPaidStatus();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const reminders = useMemo(() => {
-    void refreshKey;
-    return getRecurringReminders().map((r) => {
-      if (r.category === "diaria" && r.label.toLowerCase().includes("diária")) {
-        return { ...r, amount: driverDailiesTotal };
-      }
-      return r;
-    });
-  }, [refreshKey, driverDailiesTotal]);
-
-  // Auto-sync: create pending expenses for recurring costs — once per month only
-  useEffect(() => {
-    if (reminders.length === 0 || syncingRef.current) return;
-
-    const currentYear = String(new Date().getFullYear());
-    const lastSync = localStorage.getItem("recurring-sync-year");
-    if (lastSync === currentYear) return;
-
-    syncingRef.current = true;
-    syncRecurringToExpenses(reminders).then((created) => {
-      localStorage.setItem("recurring-sync-year", currentYear);
-      syncingRef.current = false;
-      if (created) {
+    const syncMonth = async () => {
+      const changed = await ensureRecurringExpensesForMonth(selectedYear, selectedMonth, templates);
+      if (changed && !cancelled) {
         onUpdated();
-        toast.success("Custos fixos lançados para todos os meses do ano.");
       }
-    }).catch(() => { syncingRef.current = false; });
-  }, [reminders]); // eslint-disable-line react-hooks/exhaustive-deps
+    };
 
-  const refresh = () => {
-    setRefreshKey((k) => k + 1);
+    void syncMonth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onUpdated, selectedMonth, selectedYear, templates]);
+
+  const rows = useMemo(
+    () =>
+      buildReminderRows(
+        templates,
+        expenses,
+        selectedYear,
+        selectedMonth,
+        driverDailiesTotal,
+        driverDailiesPendingTotal,
+      ),
+    [templates, expenses, selectedYear, selectedMonth, driverDailiesTotal, driverDailiesPendingTotal],
+  );
+
+  const refreshAll = async () => {
+    await refresh();
     onUpdated();
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const numAmount = parseFloat(amount.replace(",", "."));
-    if (!label.trim() || isNaN(numAmount) || numAmount <= 0) {
+    const dayOfMonth = parseInt(day, 10);
+
+    if (!label.trim() || Number.isNaN(numAmount) || numAmount <= 0 || Number.isNaN(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) {
       toast.error("Preencha todos os campos.");
       return;
     }
-    saveRecurringReminder({
+
+    await saveRecurringTemplateAsync({
       label: label.trim(),
-      dayOfMonth: parseInt(day),
+      dayOfMonth,
       amount: numAmount,
       category,
     });
+
     toast.success("Lembrete recorrente adicionado.");
     setLabel("");
+    setDay("5");
     setAmount("");
     setAdding(false);
-    refresh();
+    await refreshAll();
   };
 
-  const handleDelete = (id: string) => {
-    deleteRecurringReminder(id);
+  const handleDelete = async (templateId: string) => {
+    await deactivateRecurringTemplateAsync(templateId);
     toast("Lembrete removido.");
-    refresh();
+    await refreshAll();
   };
 
-  const handleTogglePaid = async (id: string) => {
-    const reminder = reminders.find((r) => r.id === id);
-    toggleRecurringReminderPaid(id);
+  const handleTogglePaid = async (row: ReminderRow) => {
+    if (row.readOnly) return;
 
-    // Sync the corresponding expense in DB
-    if (reminder) {
-      const now = new Date();
-      const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-      const startDate = `${monthStr}-01`;
-      const endMonth = now.getMonth() === 11
-        ? `${now.getFullYear() + 1}-01-01`
-        : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, "0")}-01`;
+    const nextStatus = row.status === "pago" ? "pendente" : "pago";
+    const occurrenceDate = createDateString(selectedYear, selectedMonth, row.dayOfMonth);
 
-      const { data } = await supabase
-        .from("expenses")
-        .select("id")
-        .eq("source", "recorrente-auto")
-        .eq("description", reminder.label)
-        .gte("date", startDate)
-        .lt("date", endMonth)
-        .limit(1);
-
-      if (data && data.length > 0) {
-        const newStatus = reminder.paid ? "pendente" : "pago";
-        await supabase.from("expenses").update({ status: newStatus }).eq("id", data[0].id);
-      } else if (!reminder.paid) {
-        // Expense doesn't exist yet — create it as "pago"
-        const day = Math.min(reminder.dayOfMonth, 28);
-        await saveExpense({
-          date: `${monthStr}-${String(day).padStart(2, "0")}`,
-          category: reminder.category,
-          description: reminder.label,
-          vehicle: "Geral",
-          amount: reminder.amount,
-          status: "pago",
-          source: "recorrente-auto",
-        });
-      }
+    if (row.expenseId) {
+      await updateExpenseStatus(row.expenseId, nextStatus);
+    } else {
+      await saveExpense({
+        date: occurrenceDate,
+        category: row.category,
+        description: row.label,
+        vehicle: "Geral",
+        amount: row.amount,
+        status: nextStatus,
+        source: "recorrente-auto",
+      });
     }
 
     toast.success("Status atualizado!");
-    refresh();
+    await refreshAll();
   };
 
-  const today = new Date().getDate();
-  const totalMonthly = reminders.reduce((s, r) => s + r.amount, 0);
-
-  const now2 = new Date();
-  const isFutureMonth = selectedYear !== undefined && selectedMonth !== undefined
-    ? (selectedYear > now2.getFullYear() || (selectedYear === now2.getFullYear() && selectedMonth > now2.getMonth()))
-    : false;
-
-  const pendingReminders = reminders.filter((r) => !r.paid);
-  const paidReminders = reminders.filter((r) => r.paid);
+  const totalMonthly = rows.reduce((sum, row) => sum + row.amount, 0);
+  const pendingRows = rows.filter((row) => row.status !== "pago");
+  const paidRows = rows.filter((row) => row.status === "pago");
 
   return (
     <div className="shadow-card rounded-2xl border border-border/50 bg-card p-6">
@@ -280,16 +191,14 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0, selected
           <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
             Custos Fixos Mensais
           </h3>
-          <p className="text-xs text-muted-foreground mt-1">
-            Total mensal: <span className="font-bold text-foreground">{totalMonthly.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Total mensal:{" "}
+            <span className="font-bold text-foreground">
+              {totalMonthly.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+            </span>
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 gap-1 text-xs"
-          onClick={() => setAdding(!adding)}
-        >
+        <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={() => setAdding((value) => !value)}>
           <Plus className="h-3 w-3" />
           Novo
         </Button>
@@ -300,24 +209,26 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0, selected
           <Input
             placeholder="Ex: Imposto da nota fiscal"
             value={label}
-            onChange={(e) => setLabel(e.target.value)}
+            onChange={(event) => setLabel(event.target.value)}
             className="h-8 text-sm"
           />
           <div className="flex gap-2">
-            <Select value={category} onValueChange={(v) => setCategory(v as ExpenseCategory)}>
-              <SelectTrigger className="h-8 text-xs flex-1">
+            <Select value={category} onValueChange={(value) => setCategory(value as ExpenseCategory)}>
+              <SelectTrigger className="h-8 flex-1 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {SORTED_CATEGORIES.map(([key, lbl]) => (
-                  <SelectItem key={key} value={key}>{lbl}</SelectItem>
+                {SORTED_CATEGORIES.filter(([key]) => key !== "diaria").map(([key, optionLabel]) => (
+                  <SelectItem key={key} value={key}>
+                    {optionLabel}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Input
               placeholder="Dia"
               value={day}
-              onChange={(e) => setDay(e.target.value)}
+              onChange={(event) => setDay(event.target.value)}
               type="number"
               min={1}
               max={31}
@@ -328,104 +239,100 @@ export function RecurringReminders({ onUpdated, driverDailiesTotal = 0, selected
             <Input
               placeholder="Valor R$"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="h-8 text-sm flex-1"
+              onChange={(event) => setAmount(event.target.value)}
+              className="h-8 flex-1 text-sm"
             />
-            <Button size="sm" className="h-8" onClick={handleAdd}>
+            <Button size="sm" className="h-8" onClick={() => void handleAdd()}>
               Salvar
             </Button>
           </div>
         </div>
       )}
 
-      {pendingReminders.length === 0 && paidReminders.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">Nenhum lembrete recorrente.</p>
       ) : (
         <>
-          {pendingReminders.length > 0 && (
+          {pendingRows.length > 0 && (
             <div className="space-y-2">
-              {pendingReminders.map((r) => {
-                const isNear = !isFutureMonth && (Math.abs(r.dayOfMonth - today) <= 3 || (today > 25 && r.dayOfMonth <= 3));
-                return (
-                  <div
-                    key={r.id}
-                    className={`flex items-center justify-between rounded-xl px-4 py-3 border ${
-                      isFutureMonth
-                        ? "border-border/30 bg-muted/10 opacity-50"
-                        : isNear
-                        ? "border-warning/30 bg-warning/5"
-                        : "border-border/50 bg-muted/20"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <Bell className={`h-3.5 w-3.5 shrink-0 ${isFutureMonth ? "text-muted-foreground/50" : isNear ? "text-warning" : "text-muted-foreground"}`} />
-                      <div className="min-w-0">
-                        <p className={`text-sm font-medium truncate ${isFutureMonth ? "text-muted-foreground" : ""}`}>{r.label}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {CATEGORY_LABELS[r.category]} · Dia {r.dayOfMonth} ·{" "}
-                          <span className="font-semibold">{r.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 ml-2">
-                      {!isFutureMonth && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-profit hover:bg-profit/10 hover:text-profit"
-                          onClick={() => handleTogglePaid(r.id)}
-                          title="Marcar como pago"
-                        >
-                          <CheckCircle2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                      <button
-                        onClick={() => handleDelete(r.id)}
-                        className="rounded p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-loss"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+              {pendingRows.map((row) => (
+                <div key={row.id} className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-4 py-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <Bell className={`h-3.5 w-3.5 shrink-0 ${row.readOnly ? "text-primary" : "text-warning"}`} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{row.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {CATEGORY_LABELS[row.category]} · Dia {row.dayOfMonth} ·{" "}
+                        <span className="font-semibold">
+                          {row.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </span>
+                      </p>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-
-          {paidReminders.length > 0 && (
-            <div className={pendingReminders.length > 0 ? "mt-4 pt-4 border-t" : ""}>
-              <h4 className="text-xs font-medium text-muted-foreground mb-2">Pagos este mês</h4>
-              <div className="space-y-1.5">
-                {paidReminders.map((r) => (
-                  <div
-                    key={r.id}
-                    className="flex items-center justify-between rounded-xl px-4 py-2.5 bg-profit/5 border border-profit/20"
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-profit shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-muted-foreground truncate">{r.label}</p>
-                        <p className="text-xs text-muted-foreground/70">
-                          {r.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 ml-2">
+                  <div className="ml-2 flex items-center gap-1">
+                    {!row.readOnly && (
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7 text-warning hover:bg-warning/10"
-                        onClick={() => handleTogglePaid(r.id)}
-                        title="Voltar para pendente"
+                        className="h-7 w-7 text-profit hover:bg-profit/10 hover:text-profit"
+                        onClick={() => void handleTogglePaid(row)}
+                        title="Marcar como pago"
                       >
-                        <RotateCcw className="h-3.5 w-3.5" />
+                        <CheckCircle2 className="h-4 w-4" />
                       </Button>
+                    )}
+                    {!row.readOnly && (
                       <button
-                        onClick={() => handleDelete(r.id)}
+                        onClick={() => void handleDelete(row.id)}
                         className="rounded p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-loss"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {paidRows.length > 0 && (
+            <div className={pendingRows.length > 0 ? "mt-4 border-t pt-4" : ""}>
+              <h4 className="mb-2 text-xs font-medium text-muted-foreground">Pagos neste mês</h4>
+              <div className="space-y-1.5">
+                {paidRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex items-center justify-between rounded-xl border border-profit/20 bg-profit/5 px-4 py-2.5"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-profit" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-muted-foreground">{row.label}</p>
+                        <p className="text-xs text-muted-foreground/70">
+                          {row.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="ml-2 flex items-center gap-1">
+                      {!row.readOnly && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-warning hover:bg-warning/10"
+                          onClick={() => void handleTogglePaid(row)}
+                          title="Voltar para pendente"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {!row.readOnly && (
+                        <button
+                          onClick={() => void handleDelete(row.id)}
+                          className="rounded p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-loss"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

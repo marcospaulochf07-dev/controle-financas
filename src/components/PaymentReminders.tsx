@@ -1,15 +1,20 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2, Clock } from "lucide-react";
-import { Expense, CATEGORY_LABELS } from "@/lib/types";
-import { getVehicleName } from "@/lib/store";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { CATEGORY_LABELS, FinancialEntry } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { compareDateStringsDesc, formatDateForDisplay } from "@/lib/date-utils";
 
-interface Props { expenses: Expense[]; onMarkPaid: (id: string) => void; isFutureMonth?: boolean; }
+interface Props {
+  expenses: FinancialEntry[];
+  onMarkPaid: (entry: FinancialEntry) => void;
+  isFutureMonth?: boolean;
+  vehicleNameMap: Record<string, string>;
+}
 
-export function PaymentReminders({ expenses, onMarkPaid, isFutureMonth = false }: Props) {
+export function PaymentReminders({ expenses, onMarkPaid, isFutureMonth = false, vehicleNameMap }: Props) {
   const pending = useMemo(
-    () => expenses.filter((e) => e.status === "pendente").sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    () => expenses.filter((e) => e.status === "pendente").sort((a, b) => compareDateStringsDesc(a.date, b.date)),
     [expenses]
   );
 
@@ -48,7 +53,7 @@ export function PaymentReminders({ expenses, onMarkPaid, isFutureMonth = false }
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">{CATEGORY_LABELS[e.category]}</p>
               <p className="text-xs text-muted-foreground truncate">
-                {e.description ? `${e.description} · ` : ""}{getVehicleName(e.vehicle)} · {new Date(e.date).toLocaleDateString("pt-BR")}
+                {e.description ? `${e.description} · ` : ""}{vehicleNameMap[e.vehicle] || e.vehicle} · {formatDateForDisplay(e.date)}
               </p>
             </div>
             <div className="flex items-center gap-3 ml-3">
@@ -60,7 +65,7 @@ export function PaymentReminders({ expenses, onMarkPaid, isFutureMonth = false }
                   size="sm"
                   variant="ghost"
                   className="h-8 w-8 p-0 text-profit hover:bg-profit/10 hover:text-profit rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                  onClick={() => onMarkPaid(e.id)}
+                  onClick={() => onMarkPaid(e)}
                   aria-label={`Marcar ${CATEGORY_LABELS[e.category]} como pago`}
                 >
                   <CheckCircle2 className="h-4.5 w-4.5" />

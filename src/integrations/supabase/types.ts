@@ -14,12 +14,34 @@ export type Database = {
   }
   public: {
     Tables: {
+      drivers: {
+        Row: {
+          active: boolean
+          created_at: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       driver_dailies: {
         Row: {
           created_at: string
           date: string
           driver_name: string
           id: string
+          paid_routes: number
           routes: number
           source: string
           value_per_route: number
@@ -30,6 +52,7 @@ export type Database = {
           date?: string
           driver_name: string
           id?: string
+          paid_routes?: number
           routes?: number
           source?: string
           value_per_route?: number
@@ -40,6 +63,7 @@ export type Database = {
           date?: string
           driver_name?: string
           id?: string
+          paid_routes?: number
           routes?: number
           source?: string
           value_per_route?: number
@@ -80,6 +104,111 @@ export type Database = {
           source?: string
           status?: string
           vehicle?: string
+        }
+        Relationships: []
+      }
+      monthly_revenues: {
+        Row: {
+          amount: number
+          created_at: string
+          month_key: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          month_key: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          month_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      recurring_templates: {
+        Row: {
+          active: boolean
+          amount: number
+          category: string
+          created_at: string
+          day_of_month: number
+          id: string
+          label: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          amount?: number
+          category: string
+          created_at?: string
+          day_of_month: number
+          id?: string
+          label: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          amount?: number
+          category?: string
+          created_at?: string
+          day_of_month?: number
+          id?: string
+          label?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vehicles: {
+        Row: {
+          active: boolean
+          created_at: string
+          display_name: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          display_name: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          display_name?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      whatsapp_conversation_state: {
+        Row: {
+          created_at: string
+          expires_at: string
+          pending_action: string
+          pending_payload: Json
+          sender: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          pending_action: string
+          pending_payload?: Json
+          sender: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          pending_action?: string
+          pending_payload?: Json
+          sender?: string
+          updated_at?: string
         }
         Relationships: []
       }

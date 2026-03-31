@@ -1,21 +1,22 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, RotateCcw } from "lucide-react";
-import { Expense, CATEGORY_LABELS } from "@/lib/types";
-import { getVehicleName } from "@/lib/store";
+import { CATEGORY_LABELS, FinancialEntry } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { compareDateStringsDesc, formatDateForDisplay } from "@/lib/date-utils";
 
 interface Props {
-  expenses: Expense[];
-  onMarkPending: (id: string) => void;
+  expenses: FinancialEntry[];
+  onMarkPending: (entry: FinancialEntry) => void;
+  vehicleNameMap: Record<string, string>;
 }
 
-export function PaidExpenses({ expenses, onMarkPending }: Props) {
+export function PaidExpenses({ expenses, onMarkPending, vehicleNameMap }: Props) {
   const paid = useMemo(
     () =>
       expenses
         .filter((e) => e.status === "pago")
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        .sort((a, b) => compareDateStringsDesc(a.date, b.date)),
     [expenses]
   );
 
@@ -37,7 +38,7 @@ export function PaidExpenses({ expenses, onMarkPending }: Props) {
 
   const sourceLabel = (source?: string) => {
     if (source === "recorrente-auto") return "Custo fixo";
-    if (source === "diaria-auto") return "Diária";
+    if (source === "driver-daily") return "Diária";
     if (source === "whatsapp") return "WhatsApp";
     return "Manual";
   };
@@ -68,7 +69,7 @@ export function PaidExpenses({ expenses, onMarkPending }: Props) {
               <p className="text-sm font-semibold">{CATEGORY_LABELS[e.category]}</p>
               <p className="text-xs text-muted-foreground truncate">
                 {e.description ? `${e.description} · ` : ""}
-                {getVehicleName(e.vehicle)} · {new Date(e.date).toLocaleDateString("pt-BR")}
+                {vehicleNameMap[e.vehicle] || e.vehicle} · {formatDateForDisplay(e.date)}
                 {" · "}
                 <span className="text-muted-foreground/70">{sourceLabel(e.source)}</span>
               </p>
@@ -81,7 +82,7 @@ export function PaidExpenses({ expenses, onMarkPending }: Props) {
                 size="sm"
                 variant="ghost"
                 className="h-8 w-8 p-0 text-warning hover:bg-warning/10 hover:text-warning rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                onClick={() => onMarkPending(e.id)}
+                onClick={() => onMarkPending(e)}
                 aria-label={`Voltar ${CATEGORY_LABELS[e.category]} para pendente`}
               >
                 <RotateCcw className="h-4 w-4" />
