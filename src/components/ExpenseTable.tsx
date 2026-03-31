@@ -80,9 +80,9 @@ export function ExpenseTable({ expenses, onDelete, vehicleNameMap }: ExpenseTabl
   return (
     <>
       <div className="overflow-x-auto" role="region" aria-label="Tabela de lançamentos">
-        <table className="w-full min-w-[720px] text-sm" aria-label="Lançamentos do mês">
+        <table className="w-full text-sm" aria-label="Lançamentos do mês">
           <thead>
-            <tr className="border-b text-left text-[11px] font-bold uppercase tracking-[0.14em] text-foreground/65">
+            <tr className="border-b text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               <th className="pb-3 pr-4" scope="col">Data</th>
               <th className="pb-3 pr-4" scope="col">Categoria</th>
               <th className="pb-3 pr-4" scope="col">Descrição</th>
@@ -99,25 +99,19 @@ export function ExpenseTable({ expenses, onDelete, vehicleNameMap }: ExpenseTabl
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: index * 0.03 }}
-                className={`border-b border-border/30 transition-colors duration-200 ${
-                  expense.status === "pendente"
-                    ? "bg-amber-50/55 hover:bg-amber-50/80"
-                    : index % 2 === 0
-                      ? "bg-background hover:bg-accent/25"
-                      : "bg-muted/10 hover:bg-accent/30"
-                }`}
+                className="group border-b border-border/30 transition-colors duration-200 hover:bg-accent/40"
               >
-                <td className="py-3.5 pr-4 tabular-nums font-medium text-foreground/72">
+                <td className="py-3.5 pr-4 tabular-nums text-muted-foreground">
                   {formatDateForDisplay(expense.date)}
                 </td>
                 <td className="py-3.5 pr-4 font-medium">
                   {CATEGORY_LABELS[expense.category]}
                 </td>
-                <td className="max-w-[280px] py-3.5 pr-4 leading-5 text-foreground/78" title={expense.description}>
+                <td className="py-3.5 pr-4 text-muted-foreground max-w-[200px] truncate" title={expense.description}>
                   {expense.description}
                 </td>
-                <td className="py-3.5 pr-4 font-medium text-foreground/82">{vehicleNameMap[expense.vehicle] || expense.vehicle}</td>
-                <td className="py-3.5 pr-4 text-right tabular-nums font-semibold text-foreground">
+                <td className="py-3.5 pr-4">{vehicleNameMap[expense.vehicle] || expense.vehicle}</td>
+                <td className="py-3.5 pr-4 text-right tabular-nums font-semibold">
                   {expense.amount.toLocaleString("pt-BR", {
                     minimumFractionDigits: 2,
                   })}
@@ -126,8 +120,8 @@ export function ExpenseTable({ expenses, onDelete, vehicleNameMap }: ExpenseTabl
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                       expense.status === "pago"
-                        ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                        : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                        ? "bg-profit/10 text-profit ring-1 ring-profit/20"
+                        : "bg-warning/10 text-warning ring-1 ring-warning/20"
                     }`}
                     role="status"
                   >
@@ -137,7 +131,7 @@ export function ExpenseTable({ expenses, onDelete, vehicleNameMap }: ExpenseTabl
                 <td className="py-3.5">
                   <button
                     onClick={() => setDeleteId(expense.id)}
-                    className="rounded-lg border border-border/70 bg-background/90 p-1.5 text-foreground/55 shadow-sm transition-all duration-200 hover:border-destructive/20 hover:bg-destructive/10 hover:text-loss focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                    className="rounded-lg p-1.5 text-muted-foreground/40 opacity-0 transition-all duration-200 group-hover:opacity-100 hover:bg-destructive/10 hover:text-loss focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                     aria-label={`Excluir ${expense.description || "lançamento"}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -151,10 +145,10 @@ export function ExpenseTable({ expenses, onDelete, vehicleNameMap }: ExpenseTabl
 
       {/* Pagination */}
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 text-sm text-foreground/72">
-          <span className="font-medium">Exibir</span>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>Exibir</span>
           <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
-            <SelectTrigger className="h-8 w-[70px] border-border/70 bg-background text-foreground">
+            <SelectTrigger className="h-8 w-[70px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -192,7 +186,6 @@ export function ExpenseTable({ expenses, onDelete, vehicleNameMap }: ExpenseTabl
                 size="icon"
                 className="h-8 w-8 text-xs"
                 onClick={() => setCurrentPage(page)}
-                aria-current={page === safePage ? "page" : undefined}
               >
                 {page}
               </Button>
