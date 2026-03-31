@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { getExpenses } from "@/lib/store";
 import { Expense } from "@/lib/types";
 import { supabase } from "@/integrations/supabase/client";
+import { createRealtimeChannelName } from "@/lib/realtime";
 
 export function useExpenses() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -19,7 +20,7 @@ export function useExpenses() {
 
     // Subscribe to realtime changes
     const channel = supabase
-      .channel("expenses-changes")
+      .channel(createRealtimeChannelName("expenses-changes"))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "expenses" },

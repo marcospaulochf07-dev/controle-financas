@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getRecurringTemplatesAsync } from "@/lib/store";
 import { RecurringTemplate } from "@/lib/types";
+import { createRealtimeChannelName } from "@/lib/realtime";
 
 export function useRecurringTemplates() {
   const [templates, setTemplates] = useState<RecurringTemplate[]>([]);
@@ -18,7 +19,7 @@ export function useRecurringTemplates() {
     refresh();
 
     const channel = supabase
-      .channel("recurring-templates-changes")
+      .channel(createRealtimeChannelName("recurring-templates-changes"))
       .on("postgres_changes", { event: "*", schema: "public", table: "recurring_templates" }, () => {
         void refresh();
       })

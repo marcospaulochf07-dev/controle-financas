@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { getDriverDailiesAsync } from "@/lib/store";
 import { DriverDaily } from "@/lib/types";
 import { supabase } from "@/integrations/supabase/client";
+import { createRealtimeChannelName } from "@/lib/realtime";
 
 export function useDriverDailies() {
   const [dailies, setDailies] = useState<DriverDaily[]>([]);
@@ -18,7 +19,7 @@ export function useDriverDailies() {
     refresh();
 
     const channel = supabase
-      .channel("driver-dailies-changes")
+      .channel(createRealtimeChannelName("driver-dailies-changes"))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "driver_dailies" },

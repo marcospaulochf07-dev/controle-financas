@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getMonthlyRevenues } from "@/lib/store";
 import { MonthlyRevenue } from "@/lib/types";
+import { createRealtimeChannelName } from "@/lib/realtime";
 
 export function useMonthlyRevenues() {
   const [revenues, setRevenues] = useState<MonthlyRevenue[]>([]);
@@ -18,7 +19,7 @@ export function useMonthlyRevenues() {
     refresh();
 
     const channel = supabase
-      .channel("monthly-revenues-changes")
+      .channel(createRealtimeChannelName("monthly-revenues-changes"))
       .on("postgres_changes", { event: "*", schema: "public", table: "monthly_revenues" }, () => {
         void refresh();
       })

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getVehiclesAsync } from "@/lib/store";
 import { Vehicle } from "@/lib/types";
+import { createRealtimeChannelName } from "@/lib/realtime";
 
 export function useVehicles() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -18,7 +19,7 @@ export function useVehicles() {
     refresh();
 
     const channel = supabase
-      .channel("vehicles-changes")
+      .channel(createRealtimeChannelName("vehicles-changes"))
       .on("postgres_changes", { event: "*", schema: "public", table: "vehicles" }, () => {
         void refresh();
       })
