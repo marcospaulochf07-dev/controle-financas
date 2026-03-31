@@ -23,11 +23,11 @@ export function PaidExpenses({ expenses, onMarkPending, vehicleNameMap }: Props)
   if (paid.length === 0) {
     return (
       <div className="rounded-2xl border border-border/50 bg-card p-6 shadow-card" role="status">
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-foreground/65">
           Pagamentos Realizados
         </h3>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <CheckCircle2 className="h-4 w-4 text-muted-foreground/50" aria-hidden="true" />
+        <div className="flex items-center gap-2 text-sm text-foreground/72">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
           Nenhum pagamento realizado neste mês.
         </div>
       </div>
@@ -46,10 +46,10 @@ export function PaidExpenses({ expenses, onMarkPending, vehicleNameMap }: Props)
   return (
     <div className="rounded-2xl border border-border/50 bg-card p-6 shadow-card" role="region" aria-label="Pagamentos realizados">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-foreground/65">
           Pagamentos Realizados
         </h3>
-        <span className="inline-flex items-center gap-1 rounded-full bg-profit/10 px-2.5 py-0.5 text-xs font-bold text-profit ring-1 ring-profit/20">
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
           <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
           {paid.length} pago{paid.length > 1 ? "s" : ""}
         </span>
@@ -62,30 +62,40 @@ export function PaidExpenses({ expenses, onMarkPending, vehicleNameMap }: Props)
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3, delay: i * 0.03 }}
-            className="flex items-center justify-between rounded-xl border border-profit/20 bg-profit/5 px-4 py-3 transition-colors hover:bg-profit/10"
+            className={`flex items-center justify-between rounded-xl border px-4 py-3 transition-colors ${
+              i % 2 === 0
+                ? "border-emerald-200 bg-emerald-50/70 hover:bg-emerald-50"
+                : "border-emerald-200/80 bg-background hover:bg-emerald-50/35"
+            }`}
             role="listitem"
           >
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">{CATEGORY_LABELS[e.category]}</p>
-              <p className="text-xs text-muted-foreground truncate">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-foreground">{CATEGORY_LABELS[e.category]}</p>
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                  Pago
+                </span>
+              </div>
+              <p className="mt-1 truncate text-xs leading-5 text-foreground/72">
                 {e.description ? `${e.description} · ` : ""}
                 {vehicleNameMap[e.vehicle] || e.vehicle} · {formatDateForDisplay(e.date)}
                 {" · "}
-                <span className="text-muted-foreground/70">{sourceLabel(e.source)}</span>
+                <span className="font-medium text-foreground/62">{sourceLabel(e.source)}</span>
               </p>
             </div>
             <div className="flex items-center gap-3 ml-3">
-              <span className="text-sm font-bold tabular-nums text-profit whitespace-nowrap">
+              <span className="whitespace-nowrap text-sm font-bold tabular-nums text-emerald-800">
                 {e.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
               </span>
               <Button
                 size="sm"
-                variant="ghost"
-                className="h-8 w-8 p-0 text-warning hover:bg-warning/10 hover:text-warning rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                variant="outline"
+                className="h-8 gap-1 rounded-lg border-amber-200 bg-amber-50 px-2 text-amber-700 hover:bg-amber-100 hover:text-amber-800 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                 onClick={() => onMarkPending(e)}
                 aria-label={`Voltar ${CATEGORY_LABELS[e.category]} para pendente`}
               >
                 <RotateCcw className="h-4 w-4" />
+                <span className="hidden sm:inline">Reabrir</span>
               </Button>
             </div>
           </motion.div>
@@ -93,8 +103,8 @@ export function PaidExpenses({ expenses, onMarkPending, vehicleNameMap }: Props)
       </div>
 
       <div className="mt-4 flex items-center justify-between border-t border-border/50 pt-4">
-        <span className="text-sm text-muted-foreground font-semibold">Total pago</span>
-        <span className="text-base font-bold tabular-nums text-profit" aria-live="polite">
+        <span className="text-sm font-semibold text-foreground/72">Total pago</span>
+        <span className="text-base font-bold tabular-nums text-emerald-800" aria-live="polite">
           {totalPaid.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
         </span>
       </div>

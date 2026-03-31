@@ -276,12 +276,12 @@ const Index = () => {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" role="region" aria-label="Métricas financeiras">
           <div>
-            <MetricCard label="Receita Bruta (Usina)" value={revenue} delay={0.1} />
+            <MetricCard label="Receita Bruta (Usina)" value={revenue} type="revenue" delay={0.1} />
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-2 px-1">
               <RevenueEditor month={monthKey} currentValue={revenue} onUpdated={() => void refresh()} />
             </motion.div>
           </div>
-          <MetricCard label="Custo Operacional Total" value={totalCost} delay={0.2} />
+          <MetricCard label="Custo Operacional Total" value={totalCost} type="cost" delay={0.2} />
           <MetricCard label="Margem Líquida" value={margin} type={margin >= 0 ? "profit" : "loss"} delay={0.3} />
         </div>
 
