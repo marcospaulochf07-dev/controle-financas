@@ -6,6 +6,7 @@ import {
   Driver,
   DriverDaily,
   Expense,
+  ExpenseCategory,
   MonthlyRevenue,
   RecurringTemplate,
   Vehicle,
