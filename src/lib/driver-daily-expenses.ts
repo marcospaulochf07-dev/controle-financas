@@ -110,7 +110,7 @@ function buildDriverDailyFinancialEntries(
         unpaidAmount: summary.unpaidAmount,
       };
     })
-    .filter((entry): entry is FinancialEntry => Boolean(entry))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
     .sort((left, right) => compareDateStringsDesc(left.date, right.date));
 }
 
