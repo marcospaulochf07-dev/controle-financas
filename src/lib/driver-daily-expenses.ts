@@ -95,7 +95,7 @@ function buildDriverDailyFinancialEntries(
       return {
         id: `${mode}-${summary.id}`,
         date: summary.date,
-        category: "diaria",
+        category: "diaria" as const,
         description: getDriverDailyDescription(summary.driverName, Number(summary.date.slice(0, 4)), Number(summary.date.slice(5, 7)) - 1),
         vehicle: summary.vehicle,
         amount,

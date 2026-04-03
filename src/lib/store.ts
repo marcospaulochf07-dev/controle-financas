@@ -114,7 +114,7 @@ function mapRecurringTemplate(row: RecurringTemplateRow): RecurringTemplate {
     label: row.label,
     dayOfMonth: Number(row.day_of_month),
     amount: Number(row.amount),
-    category: row.category,
+    category: row.category as ExpenseCategory,
     active: row.active,
   };
 }
