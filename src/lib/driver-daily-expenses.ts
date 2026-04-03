@@ -95,7 +95,7 @@ function buildDriverDailyFinancialEntries(
       return {
         id: `${mode}-${summary.id}`,
         date: summary.date,
-        category: "diaria",
+        category: "diaria" as const,
         description: getDriverDailyDescription(summary.driverName, Number(summary.date.slice(0, 4)), Number(summary.date.slice(5, 7)) - 1),
         vehicle: summary.vehicle,
         amount,
@@ -110,7 +110,7 @@ function buildDriverDailyFinancialEntries(
         unpaidAmount: summary.unpaidAmount,
       };
     })
-    .filter((entry): entry is FinancialEntry => Boolean(entry))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
     .sort((left, right) => compareDateStringsDesc(left.date, right.date));
 }
 

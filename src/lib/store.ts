@@ -6,6 +6,7 @@ import {
   Driver,
   DriverDaily,
   Expense,
+  ExpenseCategory,
   MonthlyRevenue,
   RecurringTemplate,
   Vehicle,
@@ -63,11 +64,11 @@ function mapExpense(row: ExpenseRow): Expense {
   return {
     id: row.id,
     date: row.date,
-    category: row.category,
+    category: row.category as ExpenseCategory,
     description: row.description,
     vehicle: row.vehicle,
     amount: Number(row.amount),
-    status: row.status,
+    status: row.status as "pago" | "pendente",
     source: row.source,
   };
 }
@@ -114,7 +115,7 @@ function mapRecurringTemplate(row: RecurringTemplateRow): RecurringTemplate {
     label: row.label,
     dayOfMonth: Number(row.day_of_month),
     amount: Number(row.amount),
-    category: row.category,
+    category: row.category as ExpenseCategory,
     active: row.active,
   };
 }
